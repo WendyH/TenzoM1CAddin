@@ -10,6 +10,9 @@ using namespace std;
 /// <returns></returns>
 BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
 {
+    if (PortOpened)
+        ClosePort();
+
     Adr = deviceAddr;
 
     SECURITY_ATTRIBUTES sa;
@@ -22,8 +25,10 @@ BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
     port = CreateFileW(comID.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
 
     if (port == INVALID_HANDLE_VALUE) {
+        PortOpened = FALSE;
         return FALSE;
     }
+    PortOpened = TRUE;
 
     EscapeCommFunction(port, SETDTR);
 
@@ -60,16 +65,16 @@ BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
 void TenzoM::ClosePort()
 {
     try {
-        if (port) {
+        if (port && PortOpened) {
             EscapeCommFunction(port, CLRDTR | CLRRTS);
             CloseHandle(port);
-            port = 0;
         }
     }
     catch (exception ex)
     {
-        port = 0;
     }
+    port = 0;
+    PortOpened = FALSE;
 }
 
 /// <summary>

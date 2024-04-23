@@ -13,8 +13,8 @@ static const u16string sVersion(u"00.01");
 
 static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
-	u"OpenPort",
-	u"ClosePort",
+	u"Connect",
+	u"Disconnect",
 	u"GetFixedBrutto",
 	u"GetStatus",
 	u"SetZero",
@@ -26,8 +26,8 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 };
 static const array<u16string, CAddInNative::eMethLast> osMethods_ru = 
 { 
-	u"ОткрытьПорт", 
-	u"ЗакрытьПорт", 
+	u"Подключиться", 
+	u"Отключиться", 
 	u"ПолучитьФиксированныйВесБрутто", 
 	u"ПолучитьСтатус", 
 	u"ОбнулитьПоказанияВеса", 
@@ -39,15 +39,17 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 };
 static const array<u16string, CAddInNative::ePropLast> osProps =
 { 
-	u"Adr", 
+	u"Connected",
+	u"Adr",
 	u"Calm", 
 	u"Overload", 
 	u"ErrorCode" 
 };
 static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 { 
-	u"АдресУстройства", 
-	u"ВесСтабилен", 
+	u"Подключен",
+	u"АдресУстройства",
+	u"ВесСтабилен",
 	u"Перегрузка", 
 	u"КодОшибки" 
 };
@@ -91,12 +93,13 @@ const WCHAR_T* GetClassNames()
 //---------------------------------------------------------------------------//
 CAddInNative::CAddInNative()
 {
-	m_iMemory = 0;
+	m_iMemory  = 0;
 	m_iConnect = 0;
 }
 //---------------------------------------------------------------------------//
 CAddInNative::~CAddInNative()
 {
+	tenzom.ClosePort();
 }
 //---------------------------------------------------------------------------//
 bool CAddInNative::Init(void* pConnection)
@@ -140,24 +143,34 @@ long CAddInNative::GetNProps()
 	return ePropLast;
 }
 
+//---------------------------------------------------------------------------//
+template<std::size_t SIZE>
+long FindInArrayCaseless(std::array<u16string, SIZE> arr, const WCHAR_T* name)
+{
+	auto len = wcslen(name);
+	auto it = find_if(arr.begin(), arr.end(),
+		[&](auto& s) {
+			if (s.size() != len)
+				return false;
+			for (size_t i = 0; i < s.size(); ++i)
+				if (::tolower(s[i]) == ::tolower(name[i]))
+					return true;
+			return false;
+		}
+	);
+	if (it != arr.end()) {
+		return it - arr.begin();
+	}
+	return -1;
+}
 
 //---------------------------------------------------------------------------//
 long CAddInNative::FindProp(const WCHAR_T* wsPropName)
 {
-	u16string usPropName = (char16_t*)(wsPropName);
-	tolowerStr(usPropName);
-
-	auto it = find(osProps.begin(), osProps.end(), usPropName);
-	if (it != osProps.end()) {
-		return it - osProps.begin();
-	}
-
-	it = find(osProps_ru.begin(), osProps_ru.end(), usPropName);
-	if (it != osProps_ru.end()) {
-		return it - osProps_ru.begin();
-	}
-
-	return -1;
+	auto index = FindInArrayCaseless(osProps, wsPropName);
+	if (index < 0)
+		index = FindInArrayCaseless(osProps_ru, wsPropName);
+	return index;
 }
 
 //---------------------------------------------------------------------------//
@@ -205,12 +218,18 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 {
 	switch (lPropNum)
 	{
+	case ePropConnected:
+	{
+		TV_VT(pvarPropVal) = VTYPE_BOOL;
+		pvarPropVal->lVal  = tenzom.PortOpened;
+		return true;
+	}
 	case ePropAdr:
 	{
 		TV_VT(pvarPropVal) = VTYPE_I1;
 		pvarPropVal->lVal  = tenzom.Adr;
 		return true;
-	};
+	}
 	case ePropCalm:
 	{
 		TV_VT(pvarPropVal) = VTYPE_BOOL;
@@ -259,18 +278,7 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 //---------------------------------------------------------------------------//
 bool CAddInNative::IsPropReadable(const long lPropNum)
 {
-	switch (lPropNum)
-	{
-	case ePropAdr:
-	case ePropCalm:
-	case ePropErrorCode:
-	case ePropOverload:
-		return true;
-	default:
-		return false;
-	}
-
-	return false;
+	return true;
 }
 //---------------------------------------------------------------------------//
 bool CAddInNative::IsPropWritable(const long lPropNum)
@@ -291,23 +299,14 @@ long CAddInNative::GetNMethods()
 {
 	return eMethLast;
 }
+
 //---------------------------------------------------------------------------//
 long CAddInNative::FindMethod(const WCHAR_T* wsMethodName)
 {
-	u16string usMethodName = (char16_t*)(wsMethodName);
-	tolowerStr(usMethodName);
-
-	auto it = find(osMethods.begin(), osMethods.end(), usMethodName);
-	if (it != osMethods.end()) {
-		return it - osMethods.begin();
-	}
-
-	it = find(osMethods_ru.begin(), osMethods_ru.end(), usMethodName);
-	if (it != osMethods_ru.end()) {
-		return it - osMethods_ru.begin();
-	}
-
-	return -1;
+	auto index = FindInArrayCaseless(osMethods, wsMethodName);
+	if (index < 0)
+		index = FindInArrayCaseless(osMethods_ru, wsMethodName);
+	return index;
 }
 //---------------------------------------------------------------------------//
 const WCHAR_T* CAddInNative::GetMethodName(const long lMethodNum, const long lMethodAlias)
@@ -354,7 +353,7 @@ long CAddInNative::GetNParams(const long lMethodNum)
 {
 	switch (lMethodNum)
 	{
-	case eMethOpenPort:
+	case eMethConnect:
 		return 3;
 	default:
 		return 0;
@@ -374,7 +373,7 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 {
 	switch (lMethodNum)
 	{
-	case eMethOpenPort:
+	case eMethConnect:
 	case eMethGetFixedBrutto:
 	case eMethGetStatus:
 	case eMethGetNetto:
@@ -394,10 +393,7 @@ bool CAddInNative::CallAsProc(const long lMethodNum,
 {
 	switch (lMethodNum)
 	{
-	case eMethClosePort:
-		tenzom.ClosePort();
-		return true;
-	case eMethOpenPort:
+	case eMethConnect:
 	{
 		int   portNumber = paParams[0].intVal;
 		DWORD bound      = paParams[1].intVal;
@@ -405,6 +401,9 @@ bool CAddInNative::CallAsProc(const long lMethodNum,
 		tenzom.OpenPort(portNumber, bound, deviceAdr);
 		return true;
 	}
+	case eMethDisconnect:
+		tenzom.ClosePort();
+		return true;
 	case eMethSetZero:
 		tenzom.SetZero();
 		return true;
@@ -427,7 +426,7 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 		case eMethVersion:
 			version(pvarRetValue);
 			return true;
-		case eMethOpenPort:
+		case eMethConnect:
 		{
 			int   portNumber = paParams[0].intVal;
 			DWORD bound      = paParams[1].intVal;

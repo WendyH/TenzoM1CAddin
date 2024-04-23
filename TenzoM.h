@@ -30,6 +30,7 @@ class TenzoM
 		int ExtractWeight();
 
 	public:
+		BOOL PortOpened = FALSE;
 		BYTE Adr      = 1;
 		BOOL Calm     = FALSE;
 		BOOL Overload = FALSE;

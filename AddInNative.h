@@ -20,7 +20,8 @@ class CAddInNative : public IComponentBase
 public:
     enum Props
     {
-        ePropAdr = 0,
+        ePropConnected = 0,
+        ePropAdr,
         ePropCalm,
         ePropOverload,
         ePropErrorCode,
@@ -29,8 +30,8 @@ public:
 
     enum Methods
     {
-        eMethOpenPort,
-        eMethClosePort,
+        eMethConnect = 0,
+        eMethDisconnect,
         eMethGetFixedBrutto,
         eMethGetStatus,
         eMethSetZero,
