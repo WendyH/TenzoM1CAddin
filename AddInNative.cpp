@@ -11,7 +11,7 @@ using namespace std;
 static const u16string sClassName(u"TenzoM");
 static const u16string sVersion(u"00.01");
 
-static array<u16string, CAddInNative::eMethLast> osMethods =
+static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
 	u"OpenPort",
 	u"ClosePort",
@@ -24,7 +24,7 @@ static array<u16string, CAddInNative::eMethLast> osMethods =
 	u"SwitchToWeighing",
 	u"Version",
 };
-static array<u16string, CAddInNative::eMethLast> osMethods_ru = 
+static const array<u16string, CAddInNative::eMethLast> osMethods_ru = 
 { 
 	u"ОткрытьПорт", 
 	u"ЗакрытьПорт", 
@@ -37,14 +37,14 @@ static array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"ПереключитьВРежимВзвешивания",
 	u"Версия"
 };
-static array<u16string, CAddInNative::ePropLast> osProps =
+static const array<u16string, CAddInNative::ePropLast> osProps =
 { 
 	u"Adr", 
 	u"Calm", 
 	u"Overload", 
 	u"ErrorCode" 
 };
-static array<u16string, CAddInNative::ePropLast> osProps_ru = 
+static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 { 
 	u"АдресУстройства", 
 	u"ВесСтабилен", 
@@ -93,16 +93,6 @@ CAddInNative::CAddInNative()
 {
 	m_iMemory = 0;
 	m_iConnect = 0;
-
-	for (int i = 0; i < osProps.size(); i++)
-	{
-		tolowerStr(osProps[i]);
-	}
-
-	for (int i = 0; i < osProps_ru.size(); i++)
-	{
-		tolowerStr(osProps_ru[i]);
-	}
 }
 //---------------------------------------------------------------------------//
 CAddInNative::~CAddInNative()

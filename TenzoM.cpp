@@ -17,10 +17,9 @@ BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
 
-    wchar_t comPath[100];
-    swprintf(comPath, 100, L"\\\\.\\COM%i", portNumber);
+    wstring comID = L"\\\\.\\COM" + to_wstring(portNumber);
 
-    port = CreateFile((LPSTR)comPath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
+    port = CreateFileW(comID.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
 
     if (port == INVALID_HANDLE_VALUE) {
         return FALSE;
@@ -46,8 +45,8 @@ BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
         commTimeouts.ReadIntervalTimeout         = MAXDWORD;
         commTimeouts.ReadTotalTimeoutMultiplier  = 10;
         commTimeouts.ReadTotalTimeoutConstant    = 50;
-        commTimeouts.WriteTotalTimeoutMultiplier = 0;
-        commTimeouts.WriteTotalTimeoutConstant   = 0;
+        commTimeouts.WriteTotalTimeoutMultiplier = 10;
+        commTimeouts.WriteTotalTimeoutConstant   = 50;
         SetCommTimeouts(port, &commTimeouts);
     }
 
@@ -173,6 +172,7 @@ DWORD TenzoM::Receive()
 
     if (osReader.hEvent)
     {
+        Sleep(100);
         if (!ReadFile(port, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
             LastError = GetLastError();
             if (LastError == ERROR_IO_PENDING)
@@ -281,10 +281,10 @@ int TenzoM::ExtractWeight()
     int addNulls = 3 - (con & 0x07); // Первые три бита - позиция запятой
     multiplier = 1; while (addNulls--) multiplier *= 10;
 
-    if (con && 0x80) dwWeight *= -1; // Определяем, стоит ли флаг минус
+    if (con & 0x80) dwWeight *= -1; // Определяем, стоит ли флаг минус
 
-    Calm     = (con && 0x10); // Флаг успокоения веса (вес стабилен)
-    Overload = (con && 0x08); // Флаг перегруза
+    Calm     = (con & 0x10); // Флаг успокоения веса (вес стабилен)
+    Overload = (con & 0x08); // Флаг перегруза
 
     return dwWeight * multiplier;
 }
@@ -337,14 +337,14 @@ TenzoMSTATUS TenzoM::GetStatus()
     if (Receive())
     {
         BYTE statusByte = readBuffer[3];
-        status.Reset          = statusByte && 0x80;
-        status.Error          = statusByte && 0x40;
-        status.Netto          = statusByte && 0x20;
-        status.KeyPressed     = statusByte && 0x10;
-        status.EndDosing      = statusByte && 0x08;
-        status.WeightFixed    = statusByte && 0x04;
-        status.ADCCalibration = statusByte && 0x02;
-        status.Dosing         = statusByte && 0x01;
+        status.Reset          = (BOOL)(statusByte & 0x80);
+        status.Error          = (BOOL)(statusByte & 0x40);
+        status.Netto          = (BOOL)(statusByte & 0x20);
+        status.KeyPressed     = (BOOL)(statusByte & 0x10);
+        status.EndDosing      = (BOOL)(statusByte & 0x08);
+        status.WeightFixed    = (BOOL)(statusByte & 0x04);
+        status.ADCCalibration = (BOOL)(statusByte & 0x02);
+        status.Dosing         = (BOOL)(statusByte & 0x01);
     }
 
     return status;
@@ -407,7 +407,7 @@ LPSTR TenzoM::GetIndicatorText()
     if (dwBytesRead > 5)
     {
         BYTE statusByte = readBuffer[dwBytesRead - 3];
-        Calm = statusByte && 0x01;
+        Calm = (BOOL)(statusByte & 0x01);
         readBuffer[dwBytesRead - 3];
         return (LPSTR)readBuffer + 3;
     }

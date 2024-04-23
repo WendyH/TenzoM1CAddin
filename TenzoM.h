@@ -1,7 +1,7 @@
 #pragma once
 #include <Windows.h>
 
-#define READ_TIMEOUT       1000     // milliseconds
+#define READ_TIMEOUT       2000     // milliseconds
 #define RECV_BUFFER_LENGHT 1024 * 4 // bytes
 
 struct TenzoMSTATUS {
