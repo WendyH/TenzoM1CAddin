@@ -18,6 +18,7 @@ struct TenzoMSTATUS {
 class TenzoM
 {
 	private:
+		int  randomWeight = 0;
 		HANDLE port = 0;
 		BYTE readBuffer[RECV_BUFFER_LENGHT] = { 0 };
 
@@ -27,13 +28,15 @@ class TenzoM
 		BOOL SendCommand(unsigned char command, BYTE* lpData, size_t dataLenght);
 		DWORD Receive();
 		void SetCrcOfMessage(BYTE* buffer, int bufSize);
-		int ExtractWeight();
+		int  ExtractWeight();
+		int  RandomWeight();
 
 	public:
 		BOOL PortOpened = FALSE;
 		BYTE Adr      = 1;
 		BOOL Calm     = FALSE;
 		BOOL Overload = FALSE;
+		BOOL Emulate  = FALSE;
 
 		DWORD LastError = 0;
 

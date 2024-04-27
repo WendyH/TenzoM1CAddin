@@ -15,6 +15,8 @@ BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
 
     Adr = deviceAddr;
 
+    if (Emulate) return TRUE;
+
     SECURITY_ATTRIBUTES sa;
     ZeroMemory(&sa, sizeof(sa));
     sa.nLength = sizeof(sa);
@@ -388,8 +390,8 @@ int TenzoM::GetNetto()
 /// <returns>Возвращает вес БРУТТО</returns>
 int TenzoM::GetBrutto()
 {
+    if (Emulate) return RandomWeight();
     int brutto = 0;
-
     SendCommand(0xC3);
 
     if (Receive())
@@ -441,3 +443,8 @@ void TenzoM::SwitchToWeighing()
     Receive();
 }
 
+
+int TenzoM::RandomWeight()
+{
+    return 0;
+}

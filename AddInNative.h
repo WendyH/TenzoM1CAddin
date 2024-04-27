@@ -25,6 +25,7 @@ public:
         ePropCalm,
         ePropOverload,
         ePropErrorCode,
+        ePropEmulate,
         ePropLast      // Always last
     };
 

@@ -9,7 +9,7 @@
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"00.01");
+static const u16string sVersion(u"00.02");
 
 static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
@@ -44,6 +44,7 @@ static const array<u16string, CAddInNative::ePropLast> osProps =
 	u"Calm", 
 	u"Overload", 
 	u"ErrorCode" 
+	u"Emulate",
 };
 static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 { 
@@ -51,7 +52,8 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 	u"АдресУстройства",
 	u"ВесСтабилен",
 	u"Перегрузка", 
-	u"КодОшибки" 
+	u"КодОшибки", 
+	u"РежимЭмуляции"
 };
 
 AppCapabilities g_capabilities = eAppCapabilitiesInvalid;
@@ -153,9 +155,9 @@ long FindInArrayCaseless(std::array<u16string, SIZE> arr, const WCHAR_T* name)
 			if (s.size() != len)
 				return false;
 			for (size_t i = 0; i < s.size(); ++i)
-				if (::tolower(s[i]) == ::tolower(name[i]))
-					return true;
-			return false;
+				if (::tolower(s[i]) != ::tolower(name[i]))
+					return false;
+			return true;
 		}
 	);
 	if (it != arr.end()) {
@@ -220,32 +222,38 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 	{
 	case ePropConnected:
 	{
-		TV_VT(pvarPropVal) = VTYPE_BOOL;
-		pvarPropVal->lVal  = tenzom.PortOpened;
+		TV_VT  (pvarPropVal) = VTYPE_BOOL;
+		TV_BOOL(pvarPropVal) = tenzom.PortOpened;
 		return true;
 	}
 	case ePropAdr:
 	{
 		TV_VT(pvarPropVal) = VTYPE_I1;
-		pvarPropVal->lVal  = tenzom.Adr;
+		TV_I1(pvarPropVal) = tenzom.Adr;
 		return true;
 	}
 	case ePropCalm:
 	{
-		TV_VT(pvarPropVal) = VTYPE_BOOL;
-		pvarPropVal->lVal  = tenzom.Calm;
+		TV_VT  (pvarPropVal) = VTYPE_BOOL;
+		TV_BOOL(pvarPropVal) = tenzom.Calm;
 		return true;
 	}
 	case ePropErrorCode:
 	{
-		TV_VT(pvarPropVal) = VTYPE_UI8;
-		pvarPropVal->lVal  = tenzom.LastError;
+		TV_VT(pvarPropVal) = VTYPE_I4;
+		TV_I4(pvarPropVal) = tenzom.LastError;
 		return true;
 	}
 	case ePropOverload:
 	{
-		TV_VT(pvarPropVal) = VTYPE_BOOL;
-		pvarPropVal->lVal  = tenzom.Overload;
+		TV_VT  (pvarPropVal) = VTYPE_BOOL;
+		TV_BOOL(pvarPropVal) = tenzom.Overload;
+		return true;
+	}
+	case ePropEmulate:
+	{
+		TV_VT  (pvarPropVal) = VTYPE_BOOL;
+		TV_BOOL(pvarPropVal) = tenzom.Emulate;
 		return true;
 	}
 	default:
@@ -269,6 +277,11 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 		tenzom.LastError = TV_UI8(varPropVal);
 		return true;
 	}
+	case ePropEmulate:
+	{
+		tenzom.Emulate = TV_BOOL(varPropVal);
+		return true;
+	}
 	default:
 		return false;
 	}
@@ -287,6 +300,7 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	{
 	case ePropAdr:
 	case ePropErrorCode:
+	case ePropEmulate:
 		return true;
 	default:
 		return false;
