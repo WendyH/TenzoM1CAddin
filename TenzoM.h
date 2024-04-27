@@ -18,7 +18,6 @@ struct TenzoMSTATUS {
 class TenzoM
 {
 	private:
-		int  randomWeight = 0;
 		HANDLE port = 0;
 		BYTE readBuffer[RECV_BUFFER_LENGHT] = { 0 };
 
@@ -32,11 +31,17 @@ class TenzoM
 		int  RandomWeight();
 
 	public:
-		BOOL PortOpened = FALSE;
-		BYTE Adr      = 1;
-		BOOL Calm     = FALSE;
-		BOOL Overload = FALSE;
-		BOOL Emulate  = FALSE;
+		int  emulMaxOffset	   = 0;
+		int  emulTotalSteps    = 4;
+		int  emulTargetWeight  = 0;
+		int  emulCurrentWeight = 0;
+
+		BOOL Protocol643 = FALSE;
+		BOOL PortOpened  = FALSE;
+		BYTE Adr         = 1;
+		BOOL Calm        = FALSE;
+		BOOL Overload    = FALSE;
+		BOOL Emulate     = FALSE;
 
 		DWORD LastError = 0;
 
@@ -60,5 +65,6 @@ class TenzoM
 		LPSTR GetIndicatorText();
 		int   GetCounter(BYTE numCounter);
 		void  SwitchToWeighing();
+		int   GetWeight643();
 };
 

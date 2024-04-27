@@ -1,5 +1,6 @@
 #include "TenzoM.h"
 #include <string>
+#include <random>
 using namespace std;
 
 /// <summary>
@@ -57,6 +58,24 @@ BOOL TenzoM::OpenPort(int portNumber, DWORD boud, BYTE deviceAddr)
         SetCommTimeouts(port, &commTimeouts);
     }
 
+    if (Protocol643) {
+
+        BYTE message[] = { 0x01, 0x30, 0x30, 0x30, 0x31, 0x00 };
+        snprintf((char*)message + 1, 5, "%04d", Adr);
+
+        if (!Send(message, sizeof(message) - 1))
+        {
+            LastError = GetLastError();
+            return FALSE;
+        }
+
+        Sleep(100);
+
+        DWORD dwBytesRead = Receive();
+        if (dwBytesRead < 1)
+            return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -91,13 +110,16 @@ BOOL TenzoM::Send(unsigned char* message, DWORD msgSize)
     OVERLAPPED osWrite        = { 0 };
     DWORD      dwBytesWritten = 0;
 
-    // "Подписываем сообщение" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-    SetCrcOfMessage(message, msgSize);
+    if (!Protocol643) {
+        // "Подписываем сообщение" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        SetCrcOfMessage(message, msgSize);
+    }
 
     osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (osWrite.hEvent)
     {
-        if (!WriteFile(port, message, msgSize, &dwBytesWritten, &osWrite)) {
+        if (!WriteFile(port, message, msgSize, &dwBytesWritten, &osWrite))
+        {
             LastError = GetLastError();
             if (LastError == ERROR_IO_PENDING) {
                 // Write is pending.
@@ -305,6 +327,8 @@ int TenzoM::ExtractWeight()
 /// <param name="deviceAddress">Значение нового адреса: 0x01...0xFD</param>
 void TenzoM::SetDeviceAddress(BYTE deviceAddress)
 {
+    if (Protocol643) return;
+
     SendCommand(0xA0, deviceAddress);
 
     if (Receive())
@@ -319,6 +343,8 @@ void TenzoM::SetDeviceAddress(BYTE deviceAddress)
 /// <returns>Возвращает зафикированный вес брутто</returns>
 int TenzoM::GetFixedBrutto()
 {
+    if (Protocol643) return 0;
+
     int fixedBrutto = 0;
 
     SendCommand(0xB8);
@@ -338,6 +364,7 @@ int TenzoM::GetFixedBrutto()
 TenzoMSTATUS TenzoM::GetStatus()
 {
     TenzoMSTATUS status = { 0 };
+    if (Protocol643) status;
 
     SendCommand(0xBF);
 
@@ -362,6 +389,8 @@ TenzoMSTATUS TenzoM::GetStatus()
 /// </summary>
 void TenzoM::SetZero()
 {
+    if (Protocol643) return;
+
     SendCommand(0xBF);
     Receive();
 }
@@ -372,6 +401,13 @@ void TenzoM::SetZero()
 /// <returns>Возвращает вес НЕТТО</returns>
 int TenzoM::GetNetto()
 {
+    if (Emulate) return RandomWeight();
+
+    if (Protocol643)
+    {
+        return GetWeight643();
+    }
+
     int netto = 0;
 
     SendCommand(0xC2);
@@ -391,7 +427,15 @@ int TenzoM::GetNetto()
 int TenzoM::GetBrutto()
 {
     if (Emulate) return RandomWeight();
+
+    if (Protocol643)
+    {
+        return GetWeight643();
+    }
+
     int brutto = 0;
+
+
     SendCommand(0xC3);
 
     if (Receive())
@@ -408,6 +452,10 @@ int TenzoM::GetBrutto()
 /// <returns>Возвращается вес текстом, который отображается на экране терминала.</returns>
 LPSTR TenzoM::GetIndicatorText()
 {
+    readBuffer[0] = 0;
+
+    if (Protocol643) return (LPSTR)readBuffer;
+
     SendCommand(0xC6);
 
     DWORD dwBytesRead = Receive();
@@ -418,7 +466,6 @@ LPSTR TenzoM::GetIndicatorText()
         readBuffer[dwBytesRead - 3];
         return (LPSTR)readBuffer + 3;
     }
-    readBuffer[0] = 0;
     return (LPSTR)readBuffer;
 }
 
@@ -429,6 +476,8 @@ LPSTR TenzoM::GetIndicatorText()
 /// <returns></returns>
 int TenzoM::GetCounter(BYTE numCounter)
 {
+    if (Protocol643) return 0;
+
     int counter = 0;
     SendCommand(0xC8, numCounter);
 
@@ -439,12 +488,93 @@ int TenzoM::GetCounter(BYTE numCounter)
 
 void TenzoM::SwitchToWeighing()
 {
-    SendCommand(0xCD);
-    Receive();
+    if (Protocol643)
+    {
+        BYTE message[] = { 0x18 };
+        if (Send(message, sizeof(message)))
+        {
+            Receive();
+        }
+        return;
+    }
+
+    if (SendCommand(0xCD))
+    {
+        Receive();
+    }
 }
 
-
+/// <summary>
+/// Получение рандомного веса
+/// </summary>
+/// <returns>Случайный показатель веса</returns>
 int TenzoM::RandomWeight()
 {
-    return 0;
+    if (!emulTargetWeight)
+    {
+        random_device dev;
+        mt19937 rng(dev());
+        uniform_int_distribution<mt19937::result_type> dist48_145(48, 145);
+
+        emulTargetWeight = dist48_145(rng);
+        
+        emulMaxOffset = (emulTargetWeight - emulCurrentWeight) / emulTotalSteps;
+        if ((emulMaxOffset > -2) && (emulMaxOffset < 2))
+        {
+            if (emulMaxOffset < 0)
+                emulMaxOffset = -2;
+            else
+                emulMaxOffset = 2;
+        }
+
+    }
+
+    if (emulCurrentWeight != emulTargetWeight)
+    {
+        Calm = false;
+        int offset = (emulTargetWeight - emulCurrentWeight) / 2;
+        emulCurrentWeight += (offset / 2);
+        if (offset < emulMaxOffset) {
+            emulCurrentWeight = emulTargetWeight;
+            emulTargetWeight  = 0;
+            Calm = true;
+        }
+    }
+    else
+    {
+        emulTargetWeight = 0;
+        Calm = true;
+    }
+
+    return emulCurrentWeight;
 }
+
+/// <summary>
+/// Получить вес по протокоглу 6.43
+/// </summary>
+/// <returns>Возвращает вес на индикаторе</returns>
+int TenzoM::GetWeight643()
+{
+    int brutto = 0;
+
+    BYTE message[] = { 0x10 };
+
+    if (Send(message, sizeof(message)))
+    {
+        DWORD dwBytesRead = Receive();
+
+        if (dwBytesRead > 8)
+        {
+            auto aaa = readBuffer;
+            //=  2859. 
+            //=   286.$
+        }
+    }
+    else
+    {
+        LastError = GetLastError();
+    }
+
+    return brutto;
+}
+
