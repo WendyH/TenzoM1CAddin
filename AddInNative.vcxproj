@@ -248,12 +248,14 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="TenzoM.cpp" />
+    <ClCompile Include="test.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="AddInNative.def" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AddInNative.h" />
+    <ClInclude Include="ceSerial.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="StrConv.h" />
     <ClInclude Include="TenzoM.h" />

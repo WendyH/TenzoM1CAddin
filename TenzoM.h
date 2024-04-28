@@ -1,70 +1,74 @@
 #pragma once
-#include <Windows.h>
+#include "ceSerial.h"
 
-#define READ_TIMEOUT       2000     // milliseconds
-#define RECV_BUFFER_LENGHT 1024 * 4 // bytes
+using namespace std;
+
+//#define RECV_BUFFER_LENGHT 1024 * 4 // bytes
 
 struct TenzoMSTATUS {
-	BOOL Reset;
-	BOOL Error;
-	BOOL Netto;
-	BOOL KeyPressed;
-	BOOL EndDosing;
-	BOOL WeightFixed;
-	BOOL ADCCalibration;
-	BOOL Dosing;
+	bool Reset;
+	bool Error;
+	bool Netto;
+	bool KeyPressed;
+	bool EndDosing;
+	bool WeightFixed;
+	bool ADCCalibration;
+	bool Dosing;
 };
 
 class TenzoM
 {
-	private:
-		HANDLE port = 0;
-		BYTE readBuffer[RECV_BUFFER_LENGHT] = { 0 };
+private:
+	ceSerial com;
+	vector<char> readBuffer;
 
-		BOOL Send(unsigned char* lpBuf, DWORD bufSize);
-		BOOL SendCommand(unsigned char command);
-		BOOL SendCommand(BYTE command, BYTE data);
-		BOOL SendCommand(unsigned char command, BYTE* lpData, size_t dataLenght);
-		DWORD Receive();
-		void SetCrcOfMessage(BYTE* buffer, int bufSize);
-		int  ExtractWeight();
-		int  RandomWeight();
+	bool Send(vector<char> lpBuf, long bufSize);
+	bool SendCommand(char command);
+	bool SendCommand(char command, char data);
+	bool SendCommand(char command, vector<char> lpData, long dataLenght);
+	long Receive();
+	void SetCrcOfMessage(vector<char> buffer, long bufSize);
+	int  ExtractWeight();
+	int  GetWeight643();
+	int  RandomWeight();
 
-	public:
-		int  emulMaxOffset	   = 0;
-		int  emulTotalSteps    = 4;
-		int  emulTargetWeight  = 0;
-		int  emulCurrentWeight = 0;
+public:
+	enum ProtocolType
+	{
+		eProtocolTenzoM = 0,
+		eProtocol643,
+		eProtocolNet,
+		eProtocolWeb
+	};
 
-		BOOL Protocol643 = FALSE;
-		BOOL PortOpened  = FALSE;
-		BYTE Adr         = 1;
-		BOOL Calm        = FALSE;
-		BOOL Overload    = FALSE;
-		BOOL Emulate     = FALSE;
+	int  emulMaxOffset     = 0;
+	int  emulTotalSteps    = 4;
+	int  emulTargetWeight  = 0;
+	int  emulCurrentWeight = 0;
 
-		DWORD LastError = 0;
+	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
+	
+	unsigned char Adr = 1; // Адрес устройства
 
-		// destructor
-		~TenzoM()
-		{
-			ClosePort();
-		}
+	bool Calm     = false; // Вес стабилен
+	bool Overload = false; // Флаг перегрузки
+	bool Emulate  = false; // Режим эмуляции
 
-		BOOL  OpenPort(int portNumber, DWORD boud, BYTE deviceAddr);
-		void  ClosePort();
+	string IP      = { 0 }; // IP-адрес для протоколов web или net
+	int         NetPort = 5001;  // Порт для протокола net
+	int         WebPort = 8080;  // Порт для протокола web
 
-		void  SetDeviceAddress(BYTE deviceAddress);
-		DWORD GetDeviceSN();
+	unsigned long LastError	 = 0;
 
-		int   GetFixedBrutto();
-		TenzoMSTATUS GetStatus();
-		void  SetZero();
-		int   GetNetto();
-		int   GetBrutto();
-		LPSTR GetIndicatorText();
-		int   GetCounter(BYTE numCounter);
-		void  SwitchToWeighing();
-		int   GetWeight643();
+	bool  OpenPort(string comName, long boud, int deviceAddress);
+	void  ClosePort();
+	bool  PortOpened();
+
+	int   GetFixedBrutto();
+	TenzoMSTATUS GetStatus();
+	bool  SetZero();
+	int   GetNetto();
+	int   GetBrutto();
+	char* GetIndicatorText();
+	void  SwitchToWeighing();
 };
-

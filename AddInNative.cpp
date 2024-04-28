@@ -2,6 +2,8 @@
 #include "stdafx.h"
 #endif
 
+#define CE_SERIAL_IMPLEMENTATION
+
 #include <stdio.h>
 #include <wchar.h>
 #include "AddInNative.h"
@@ -9,7 +11,7 @@
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"00.02");
+static const u16string sVersion(u"01.00");
 
 static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
@@ -223,7 +225,7 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 	case ePropConnected:
 	{
 		TV_VT  (pvarPropVal) = VTYPE_BOOL;
-		TV_BOOL(pvarPropVal) = tenzom.PortOpened;
+		TV_BOOL(pvarPropVal) = tenzom.PortOpened();
 		return true;
 	}
 	case ePropAdr:
@@ -274,7 +276,7 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 	}
 	case ePropErrorCode:
 	{
-		tenzom.LastError = TV_UI8(varPropVal);
+		tenzom.LastError = TV_UI4(varPropVal);
 		return true;
 	}
 	case ePropEmulate:
@@ -412,7 +414,7 @@ bool CAddInNative::CallAsProc(const long lMethodNum,
 		int   portNumber = paParams[0].intVal;
 		DWORD bound      = paParams[1].intVal;
 		BYTE  deviceAdr  = paParams[2].ui8Val;
-		tenzom.OpenPort(portNumber, bound, deviceAdr);
+		//tenzom.OpenPort(portNumber, bound, deviceAdr);
 		return true;
 	}
 	case eMethDisconnect:
@@ -447,7 +449,7 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 			BYTE  deviceAdr  = paParams[2].ui8Val;
 
 			TV_VT(pvarRetValue) = VTYPE_BOOL;
-			pvarRetValue->bVal = tenzom.OpenPort(portNumber, bound, deviceAdr);
+			//pvarRetValue->bVal = tenzom.OpenPort(portNumber, bound, deviceAdr);
 
 			return true;
 		}
