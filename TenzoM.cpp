@@ -3,6 +3,8 @@
 
 using namespace std;
 
+#define MAX_RECV_BYTES 1024*4
+
 /// <summary>
 /// Открыть COM порт для общения с устройствами тензотермическими датчиками
 /// </summary>
@@ -106,25 +108,10 @@ bool TenzoM::SendCommand(char command, char data)
 }
 
 /// <summary>
-/// Послать команду весам с дополнительными данными.
-/// </summary>
-/// <param name="command">Байт-команда</param>
-/// <param name="lpData">Буфер с дополнительными данными</param>
-/// <param name="dataLenght">Длина дополнительных данных</param>
-/// <returns>Возвращает TRUE - если передача успешно завершилась</returns>
-bool TenzoM::SendCommand(char command, vector<char> lpData, long dataLenght)
-{
-
-    vector<char> msg = { '\xFF', (char)Adr, command, lpData, 0, '\xFF', '\xFF' };
-
-    return Send(msg, msg.size());
-}
-
-/// <summary>
 /// Получить ответ от весов в указанный буфер.
 /// </summary>
 /// <returns>Возвращает количество считанных байт в буфер. Если 0 - тогда проверять статус или LastError.</returns>
-long TenzoM::Receive()
+long TenzoM::Receive(vector<char> readBuffer)
 {
     long readBytes    = 0;
     bool successRead  = false;
@@ -132,7 +119,7 @@ long TenzoM::Receive()
     char previousChar = 0;
     int  offset       = 0;
 
-    memset(&readBuffer[0], 0, RECV_BUFFER_LENGHT);
+    readBuffer.clear();
 
     if (Protocol == eProtocolTenzoM)
     {
@@ -146,7 +133,7 @@ long TenzoM::Receive()
             if (successRead)
             {
                 readBytes++;
-                if (readBytes > RECV_BUFFER_LENGHT)
+                if (readBytes > MAX_RECV_BYTES)
                     break;
             }
             
@@ -162,7 +149,7 @@ long TenzoM::Receive()
             }
             if (packetBegan)
             {
-                readBuffer.at[offset++] = currentChar;
+                readBuffer.push_back(currentChar);
             }
 
             previousChar = currentChar;
@@ -176,9 +163,10 @@ long TenzoM::Receive()
             currentChar = com.ReadChar(successRead);
             if (successRead)
             {
-                readBuffer[readBytes++] = currentChar;
-                if (readBytes >= RECV_BUFFER_LENGHT)
+                readBytes++;
+                if (readBytes > MAX_RECV_BYTES)
                     break;
+                readBuffer.push_back(currentChar);
             }
         } while (successRead);
     }
@@ -225,10 +213,10 @@ void TenzoM::SetCrcOfMessage(vector<char> buffer, long bufSize)
 /// </summary>
 /// <returns>Возвращает полученный вес в граммах.
 /// Также устанавливает свойства стабильности веса и перегруза.</returns>
-int TenzoM::ExtractWeight()
+int TenzoM::ExtractWeight(vector<char> readBuffer)
 {
     int   dwWeight = 0;
-    char* lpBuf = &readBuffer->at(2); // Указывает на начало последовательности байтов веса
+    char* lpBuf = &readBuffer.at(2); // Указывает на начало последовательности байтов веса
     int   bytes = 3; // Количество байт для считывания упакованного в BCD веса (у TenzoM - 3)
     int   multiplier = 1;
 
@@ -270,9 +258,10 @@ int TenzoM::GetFixedBrutto()
     {
         if (SendCommand(0xB8))
         {
-            if (Receive())
+            vector<char> readBuffer;
+            if (Receive(readBuffer))
             {
-                fixedBrutto = ExtractWeight();
+                fixedBrutto = ExtractWeight(readBuffer);
             }
         }
     }
@@ -290,20 +279,24 @@ TenzoMSTATUS TenzoM::GetStatus()
 
     if (Protocol == eProtocolTenzoM)
     {
-        SendCommand(0xBF);
-
-        if (Receive())
+        if (SendCommand(0xBF))
         {
-            BYTE statusByte = readBuffer->at(2);
-            status.Reset          = (statusByte & 0x80);
-            status.Error          = (statusByte & 0x40);
-            status.Netto          = (statusByte & 0x20);
-            status.KeyPressed     = (statusByte & 0x10);
-            status.EndDosing      = (statusByte & 0x08);
-            status.WeightFixed    = (statusByte & 0x04);
-            status.ADCCalibration = (statusByte & 0x02);
-            status.Dosing         = (statusByte & 0x01);
+            vector<char> readBuffer;
+            if (Receive(readBuffer))
+            {
+                unsigned char statusByte = readBuffer.at(2);
+                status.Reset = (statusByte & 0x80);
+                status.Error = (statusByte & 0x40);
+                status.Netto = (statusByte & 0x20);
+                status.KeyPressed = (statusByte & 0x10);
+                status.EndDosing = (statusByte & 0x08);
+                status.WeightFixed = (statusByte & 0x04);
+                status.ADCCalibration = (statusByte & 0x02);
+                status.Dosing = (statusByte & 0x01);
+            }
+
         }
+
     }
 
     return status;
@@ -329,7 +322,8 @@ bool TenzoM::SetZero()
     {
         if (SendCommand(0xBF))
         {
-            return Receive() > 0;
+            vector<char> readBuffer;
+            return Receive(readBuffer) > 0;
         }
     }
 }
@@ -353,9 +347,10 @@ int TenzoM::GetNetto()
     {
         if (SendCommand(0xC2))
         {
-            if (Receive())
+            vector<char> readBuffer;
+            if (Receive(readBuffer))
             {
-                netto = ExtractWeight();
+                netto = ExtractWeight(readBuffer);
             }
         }
 
@@ -383,9 +378,10 @@ int TenzoM::GetBrutto()
     {
         if (SendCommand(0xC3))
         {
-            if (Receive())
+            vector<char> readBuffer;
+            if (Receive(readBuffer))
             {
-                brutto = ExtractWeight();
+                brutto = ExtractWeight(readBuffer);
             }
 
         }
@@ -400,22 +396,22 @@ int TenzoM::GetBrutto()
 /// <returns>Возвращается вес текстом, который отображается на экране терминала.</returns>
 char* TenzoM::GetIndicatorText()
 {
-    memset(&readBuffer->at(0), 0, RECV_BUFFER_LENGHT);
+    vector<char> readBuffer;
 
     if (Protocol == eProtocolTenzoM)
     {
         SendCommand(0xC6);
 
-        const auto bytesRead = Receive();
+        const auto bytesRead = Receive(readBuffer);
         if (bytesRead > 5)
         {
-            char statusByte = readBuffer->at(bytesRead - 2);
+            char statusByte = readBuffer.at(bytesRead - 2);
             Calm = (statusByte & 0x01);
-            return &readBuffer->at(2);
+            return &readBuffer.at(2);
         }
     }
 
-    return &readBuffer->at(0);
+    return &readBuffer.at(0);
 }
 
 void TenzoM::SwitchToWeighing()
@@ -428,7 +424,8 @@ void TenzoM::SwitchToWeighing()
     {
         if (SendCommand(0xCD))
         {
-            Receive();
+            vector<char> readBuffer;
+            Receive(readBuffer);
         }
         break;
     }
@@ -501,21 +498,22 @@ int TenzoM::RandomWeight()
 int TenzoM::GetWeight643()
 {
     int brutto = 0;
+    vector<char> readBuffer;
 
     bool success = com.WriteChar(0x10);
 
     if (success)
     {
-        const auto bytesRead = Receive();
+        const auto bytesRead = Receive(readBuffer);
 
         if (bytesRead > 8)
         {
             //=  2859. 
             //=   286.$
-            string text(&readBuffer->at(1), 6);
+            string text(&readBuffer.at(1), 6);
             brutto = stoi(text, 0, 10) * 1000;
 
-            char lastByte = readBuffer->at(8);
+            char lastByte = readBuffer.at(8);
             if (!(lastByte & 0x04))
             {
                 brutto /= 10;

@@ -20,15 +20,13 @@ class TenzoM
 {
 private:
 	ceSerial com;
-	vector<char> readBuffer;
 
 	bool Send(vector<char> lpBuf, long bufSize);
 	bool SendCommand(char command);
 	bool SendCommand(char command, char data);
-	bool SendCommand(char command, vector<char> lpData, long dataLenght);
-	long Receive();
+	long Receive(vector<char> readBuffer);
 	void SetCrcOfMessage(vector<char> buffer, long bufSize);
-	int  ExtractWeight();
+	int  ExtractWeight(vector<char> readBuffer);
 	int  GetWeight643();
 	int  RandomWeight();
 
