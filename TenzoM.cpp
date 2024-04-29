@@ -27,7 +27,7 @@ bool TenzoM::OpenPort(string comName, long boud, int deviceAddress)
     {
         // Активация терминала. Посылаем 01 с адресом устройсва как строка из 4 цифр.
         // Работать с весами можно через 20 мс.
-        vector<char> message = { 0x01, 0x30, 0x30, 0x30, 0x31, 0x00 };
+        vector<char> message = { '\x01', '\x30', '\x30', '\x30', '\x31', '\x00'};
         snprintf(&message.at(1), 5, "%04d", (int)Adr);
         success = com.Write(&message.at(0), 5);
         if (success)
@@ -69,55 +69,54 @@ bool TenzoM::PortOpened()
 }
 
 /// <summary>
-/// Передать в весы последовательность байт в буфере через открытый Com-порт.
-/// </summary>
-/// <param name="message">Ссылка на буфер, содержащий данные для передачи.</param>
-/// <param name="msgSize">Длина передаваемых данных</param>
-/// <returns>Если завершилось всё без ошибок и данные переданы - возвращает TRUE. Иначе нет.</returns>
-bool TenzoM::Send(vector<char> message, long msgSize)
-{
-    if (Protocol == eProtocolTenzoM) {
-        // "Подписываем сообщение" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-        SetCrcOfMessage(message, msgSize);
-    }
-
-    return com.Write(&message.at(0), msgSize);
-}
-
-/// <summary>
 /// Послать команду весам без дополнительных передаваемых данных.
 /// </summary>
 /// <param name="command">Байт-команда</param>
 /// <returns>Возвращает TRUE - если передача успешно завершилась</returns>
 bool TenzoM::SendCommand(char command)
 {
-    vector<char> message = { '\xFF', (char)Adr, command, '\x00', '\xFF', '\xFF' };
-    return Send(message, sizeof(message));
-}
+    bool success = false;
+    vector<char> message;
 
-/// <summary>
-/// Послать команду весам с указанимем дополнительного байта данных
-/// </summary>
-/// <param name="command">Байт-команда</param>
-/// <param name="data">Дополнительный байт-данные</param>
-/// <returns>Возвращает TRUE - если передача успешно завершилась</returns>
-bool TenzoM::SendCommand(char command, char data)
-{
-    vector<char> message = { '\xFF', (char)Adr, command, data, '\x00', '\xFF', '\xFF' };
-    return Send(message, sizeof(message));
+    switch (Protocol)
+    {
+    case TenzoM::eProtocolTenzoM:
+        message.push_back('\xFF');    // Начало кадра
+        message.push_back((char)Adr); // Байт адреса устройства
+        message.push_back(command);
+        message.push_back('\x00');    // Байт для контрольной суммы
+        message.push_back('\xFF');    // \ 
+        message.push_back('\xFF');    // / Конец кадра
+        // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        SetCrcOfMessage(message, message.size());
+
+        success = com.Write(&message.at(0), message.size());
+
+        break;
+    case TenzoM::eProtocol643:
+        success = com.WriteChar(command);
+        break;
+    case TenzoM::eProtocolNet:
+        break;
+    case TenzoM::eProtocolWeb:
+        break;
+    default:
+        break;
+    }
+
+    return success;
 }
 
 /// <summary>
 /// Получить ответ от весов в указанный буфер.
 /// </summary>
 /// <returns>Возвращает количество считанных байт в буфер. Если 0 - тогда проверять статус или LastError.</returns>
-long TenzoM::Receive(vector<char> readBuffer)
+long TenzoM::Receive(vector<char>& readBuffer)
 {
     long readBytes    = 0;
     bool successRead  = false;
     char currentChar  = 0;
     char previousChar = 0;
-    int  offset       = 0;
 
     readBuffer.clear();
 
@@ -154,7 +153,6 @@ long TenzoM::Receive(vector<char> readBuffer)
 
             previousChar = currentChar;
         } while (successRead);
-        readBytes = offset + 1;
     }
     else
     {
@@ -171,7 +169,7 @@ long TenzoM::Receive(vector<char> readBuffer)
         } while (successRead);
     }
 
-    return readBytes;
+    return readBuffer.size();
 }
 
 /// <summary>
@@ -179,15 +177,15 @@ long TenzoM::Receive(vector<char> readBuffer)
 /// </summary>
 /// <param name="buffer">Адрес сообщения</param>
 /// <param name="bufSize">Длина сообщения</param>
-void TenzoM::SetCrcOfMessage(vector<char> buffer, long bufSize)
+void TenzoM::SetCrcOfMessage(vector<char>& buffer, long bufSize)
 {
     if (bufSize < 6) return; // minimum message lenght
-    buffer[bufSize - 3] = 0; // set crc to 0
-    BYTE byte, crc = 0, polinom = 0x69;
+    buffer.at(bufSize - 3) = 0; // set crc to 0
+    char byte, crc = 0; constexpr char polinom = '\x69';
     for (int i = 1; i < bufSize - 2; i++)
     {
-        byte = buffer[i];
-        if ((byte == 0xFF) || (byte == 0xFE)) continue;
+        byte = buffer.at(i);
+        if ((byte == '\xFF') || (byte == '\xFE')) continue;
         for (int j = 0; j < 8; j++)
         {
             if (crc & (1 << 7))
@@ -205,7 +203,7 @@ void TenzoM::SetCrcOfMessage(vector<char> buffer, long bufSize)
         }
         byte = 0;
     }
-    buffer[bufSize - 3] = crc;
+    buffer.at(bufSize - 3) = crc;
 }
 
 /// <summary>
@@ -213,34 +211,34 @@ void TenzoM::SetCrcOfMessage(vector<char> buffer, long bufSize)
 /// </summary>
 /// <returns>Возвращает полученный вес в граммах.
 /// Также устанавливает свойства стабильности веса и перегруза.</returns>
-int TenzoM::ExtractWeight(vector<char> readBuffer)
+int TenzoM::ExtractWeight(vector<char>& readBuffer)
 {
-    int   dwWeight = 0;
-    char* lpBuf = &readBuffer.at(2); // Указывает на начало последовательности байтов веса
-    int   bytes = 3; // Количество байт для считывания упакованного в BCD веса (у TenzoM - 3)
-    int   multiplier = 1;
+    int       weight     = 0; // Вычисленный вес
+    const int offset     = 2; // Смещение от начала буфера, где идут байты веса
+    const int bytes      = 3; // Количество байт для считывания упакованного в BCD веса (у TenzoM - 3)
+    int       multiplier = 1; // Множитель (вычисляется для разных разрядов)
 
     // Распаковка цифр веса из BCD формата (младшие байты первые)
-    while (bytes--)
+    for (int i = 0; i < bytes; i++)
     {
-        dwWeight += ((*lpBuf >> 4) * 10 + (*lpBuf & 0x0F)) * multiplier;
+        auto byte = readBuffer.at(offset + i);
+        weight += ((byte >> 4) * 10 + (byte & '\x0F')) * multiplier;
         multiplier *= 100;
-        lpBuf++;
     }
 
     // За весом в полученном буфере идёт байт CON с дополнительными фалагами
-    char con = *lpBuf;
+    const char con = readBuffer.at(offset + bytes);
 
     // Т.к. возврращаем в граммах, то считаем, сколько добавить нулей к результату
-    int addNulls = 3 - (con & 0x07); // Первые три бита - позиция запятой
+    int addNulls = 3 - (con & '\x07'); // Первые три бита - позиция запятой
     multiplier = 1; while (addNulls--) multiplier *= 10;
 
-    if (con & 0x80) dwWeight *= -1; // Определяем, стоит ли флаг минус
+    if (con & '\x80') weight *= -1; // Определяем, стоит ли флаг минус
 
-    Calm = (con & 0x10); // Флаг успокоения веса (вес стабилен)
-    Overload = (con & 0x08); // Флаг перегруза
+    Calm = (con & '\x10'); // Флаг успокоения веса (вес стабилен)
+    Overload = (con & '\x08'); // Флаг перегруза
 
-    return dwWeight * multiplier;
+    return weight * multiplier;
 }
 
 
@@ -256,7 +254,7 @@ int TenzoM::GetFixedBrutto()
 
     if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand(0xB8))
+        if (SendCommand('\xB8'))
         {
             vector<char> readBuffer;
             if (Receive(readBuffer))
@@ -279,20 +277,20 @@ TenzoMSTATUS TenzoM::GetStatus()
 
     if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand(0xBF))
+        if (SendCommand('\xBF'))
         {
             vector<char> readBuffer;
             if (Receive(readBuffer))
             {
-                unsigned char statusByte = readBuffer.at(2);
-                status.Reset = (statusByte & 0x80);
-                status.Error = (statusByte & 0x40);
-                status.Netto = (statusByte & 0x20);
-                status.KeyPressed = (statusByte & 0x10);
-                status.EndDosing = (statusByte & 0x08);
-                status.WeightFixed = (statusByte & 0x04);
-                status.ADCCalibration = (statusByte & 0x02);
-                status.Dosing = (statusByte & 0x01);
+                const char statusByte = readBuffer.at(2);
+                status.Reset          = (statusByte & '\x80');
+                status.Error          = (statusByte & '\x40');
+                status.Netto          = (statusByte & '\x20');
+                status.KeyPressed     = (statusByte & '\x10');
+                status.EndDosing      = (statusByte & '\x08');
+                status.WeightFixed    = (statusByte & '\x04');
+                status.ADCCalibration = (statusByte & '\x02');
+                status.Dosing         = (statusByte & '\x01');
             }
 
         }
@@ -307,25 +305,27 @@ TenzoMSTATUS TenzoM::GetStatus()
 /// </summary>
 bool TenzoM::SetZero()
 {
-    bool success;
+    bool success = false;
 
     if (Protocol == eProtocol643)
     {
-        success = com.WriteChar(0x0D);
+        success = com.WriteChar('\x0D');
         if (success)
         {
             com.Delay(20);
-            success = (com.ReadChar(success) == 0xFF);
+            success = (com.ReadChar(success) == '\xFF');
         }
     }
     else if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand(0xBF))
+        if (SendCommand('\xBF'))
         {
             vector<char> readBuffer;
-            return Receive(readBuffer) > 0;
+            success = Receive(readBuffer) > 0;
         }
     }
+
+    return success;
 }
 
 /// <summary>
@@ -345,7 +345,7 @@ int TenzoM::GetNetto()
 
     if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand(0xC2))
+        if (SendCommand('\xC2'))
         {
             vector<char> readBuffer;
             if (Receive(readBuffer))
@@ -376,7 +376,7 @@ int TenzoM::GetBrutto()
 
     if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand(0xC3))
+        if (SendCommand('\xC3'))
         {
             vector<char> readBuffer;
             if (Receive(readBuffer))
@@ -390,30 +390,6 @@ int TenzoM::GetBrutto()
     return brutto;
 }
 
-/// <summary>
-/// Получить значения индикаторов (то, что выводится на экране терминала)
-/// </summary>
-/// <returns>Возвращается вес текстом, который отображается на экране терминала.</returns>
-char* TenzoM::GetIndicatorText()
-{
-    vector<char> readBuffer;
-
-    if (Protocol == eProtocolTenzoM)
-    {
-        SendCommand(0xC6);
-
-        const auto bytesRead = Receive(readBuffer);
-        if (bytesRead > 5)
-        {
-            char statusByte = readBuffer.at(bytesRead - 2);
-            Calm = (statusByte & 0x01);
-            return &readBuffer.at(2);
-        }
-    }
-
-    return &readBuffer.at(0);
-}
-
 void TenzoM::SwitchToWeighing()
 {
     bool success;
@@ -422,7 +398,7 @@ void TenzoM::SwitchToWeighing()
     {
     case TenzoM::eProtocolTenzoM:
     {
-        if (SendCommand(0xCD))
+        if (SendCommand('\xCD'))
         {
             vector<char> readBuffer;
             Receive(readBuffer);
@@ -431,7 +407,7 @@ void TenzoM::SwitchToWeighing()
     }
     case TenzoM::eProtocol643:
     {
-        if (com.WriteChar(0x18))
+        if (com.WriteChar('\x18'))
         {
             com.ReadChar(success);
         }
@@ -444,6 +420,31 @@ void TenzoM::SwitchToWeighing()
     default:
         break;
     }
+}
+
+/// <summary>
+/// Получение списка доступных COM-портов
+/// </summary>
+/// <returns>Возвращается строка с именами доступных COM-портов, разделёнными точкой с запятой.</returns>
+string TenzoM::GetFreeComPorts()
+{
+    string ports = "";
+    ceSerial _com;
+    
+    for (int i = 1; i < 255; i++)
+    {
+        string name = "COM" + to_string(i);
+        _com.SetPortName(name);
+        _com.Open();
+        if (_com.Open() == 0)
+        {
+            if (ports.size() > 0)
+                ports += ";";
+            _com.Close();
+            ports += name;
+        }
+    }
+    return string(ports);
 }
 
 /// <summary>
@@ -500,7 +501,7 @@ int TenzoM::GetWeight643()
     int brutto = 0;
     vector<char> readBuffer;
 
-    bool success = com.WriteChar(0x10);
+    bool success = com.WriteChar('\x10');
 
     if (success)
     {
@@ -513,12 +514,12 @@ int TenzoM::GetWeight643()
             string text(&readBuffer.at(1), 6);
             brutto = stoi(text, 0, 10) * 1000;
 
-            char lastByte = readBuffer.at(8);
-            if (!(lastByte & 0x04))
+            const char lastByte = readBuffer.at(8);
+            if (!(lastByte & '\x04'))
             {
                 brutto /= 10;
             }
-            Calm = (lastByte & 0x20);
+            Calm = (lastByte & '\x20');
             success = true;
         }
     }

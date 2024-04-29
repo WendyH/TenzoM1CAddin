@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 #include "ceSerial.h"
 
 using namespace std;
@@ -21,12 +22,10 @@ class TenzoM
 private:
 	ceSerial com;
 
-	bool Send(vector<char> lpBuf, long bufSize);
 	bool SendCommand(char command);
-	bool SendCommand(char command, char data);
-	long Receive(vector<char> readBuffer);
-	void SetCrcOfMessage(vector<char> buffer, long bufSize);
-	int  ExtractWeight(vector<char> readBuffer);
+	long Receive(vector<char>& readBuffer);
+	void SetCrcOfMessage(vector<char>& buffer, long bufSize);
+	int  ExtractWeight(vector<char>& readBuffer);
 	int  GetWeight643();
 	int  RandomWeight();
 
@@ -46,27 +45,27 @@ public:
 
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
 	
-	unsigned char Adr = 1; // Адрес устройства
+	unsigned char Adr = 1;  // Адрес устройства
 
-	bool Calm     = false; // Вес стабилен
-	bool Overload = false; // Флаг перегрузки
-	bool Emulate  = false; // Режим эмуляции
+	bool Calm     = false;  // Вес стабилен
+	bool Overload = false;  // Флаг перегрузки
+	bool Emulate  = false;  // Режим эмуляции
 
 	string IP      = { 0 }; // IP-адрес для протоколов web или net
-	int         NetPort = 5001;  // Порт для протокола net
-	int         WebPort = 8080;  // Порт для протокола web
+	int    NetPort = 5001;  // Порт для протокола net
+	int    WebPort = 8080;  // Порт для протокола web
 
 	unsigned long LastError	 = 0;
 
-	bool  OpenPort(string comName, long boud, int deviceAddress);
-	void  ClosePort();
-	bool  PortOpened();
+	bool OpenPort(string comName, long boud, int deviceAddress);
+	void ClosePort();
+	bool PortOpened();
 
-	int   GetFixedBrutto();
 	TenzoMSTATUS GetStatus();
-	bool  SetZero();
-	int   GetNetto();
-	int   GetBrutto();
-	char* GetIndicatorText();
-	void  SwitchToWeighing();
+	int    GetFixedBrutto();
+	bool   SetZero();
+	int    GetNetto();
+	int    GetBrutto();
+	void   SwitchToWeighing();
+	string GetFreeComPorts();
 };

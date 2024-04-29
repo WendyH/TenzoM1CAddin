@@ -4,6 +4,9 @@
 
 #define CE_SERIAL_IMPLEMENTATION
 
+#include <string>
+#include <locale>
+#include <codecvt>
 #include <stdio.h>
 #include <wchar.h>
 #include "AddInNative.h"
@@ -22,8 +25,8 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 	u"SetZero",
 	u"GetNetto",
 	u"GetBrutto",
-	u"GetIndicatorText",
 	u"SwitchToWeighing",
+	u"GetPorts",
 	u"Version",
 };
 static const array<u16string, CAddInNative::eMethLast> osMethods_ru = 
@@ -35,8 +38,8 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"ОбнулитьПоказанияВеса", 
 	u"ПолучитьВесНетто",
 	u"ПолучитьВесБрутто",
-	u"ПолучитьЗначенияИндикаторов",
 	u"ПереключитьВРежимВзвешивания",
+	u"ПолучитьДоступныеПорты",
 	u"Версия"
 };
 static const array<u16string, CAddInNative::ePropLast> osProps =
@@ -59,6 +62,24 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 };
 
 AppCapabilities g_capabilities = eAppCapabilitiesInvalid;
+
+template <typename T>
+string toUTF8(const basic_string<T, char_traits<T>, allocator<T>>& source)
+{
+	string result;
+
+	wstring_convert<codecvt_utf8_utf16<T>, T> convertor;
+	result = convertor.to_bytes(source);
+
+	return result;
+}
+
+template <typename T>
+void fromUTF8(const string& source, basic_string<T, char_traits<T>, allocator<T>>& result)
+{
+	wstring_convert<codecvt_utf8_utf16<T>, T> convertor;
+	result = convertor.from_bytes(source);
+}
 
 //---------------------------------------------------------------------------//
 long GetClassObject(const WCHAR_T* wsName, IComponentBase** pInterface)
@@ -103,7 +124,6 @@ CAddInNative::CAddInNative()
 //---------------------------------------------------------------------------//
 CAddInNative::~CAddInNative()
 {
-	tenzom.ClosePort();
 }
 //---------------------------------------------------------------------------//
 bool CAddInNative::Init(void* pConnection)
@@ -394,7 +414,7 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 	case eMethGetStatus:
 	case eMethGetNetto:
 	case eMethGetBrutto:
-	case eMethGetIndicatorText:
+	case eMethGetPorts:
 	case eMethVersion:
 		return true;
 	default:
@@ -411,10 +431,16 @@ bool CAddInNative::CallAsProc(const long lMethodNum,
 	{
 	case eMethConnect:
 	{
-		int   portNumber = paParams[0].intVal;
-		DWORD bound      = paParams[1].intVal;
-		BYTE  deviceAdr  = paParams[2].ui8Val;
-		//tenzom.OpenPort(portNumber, bound, deviceAdr);
+		if (paParams[0].vt != VTYPE_PWSTR)
+			return false;
+
+		u16string name;
+		name.clear();
+		name.assign(reinterpret_cast<char16_t*>(paParams[0].pwstrVal), paParams[0].wstrLen);
+
+		long  bound     = paParams[1].intVal;
+		int   deviceAdr = paParams[2].ui8Val;
+		tenzom.OpenPort(toUTF8(name), bound, deviceAdr);
 		return true;
 	}
 	case eMethDisconnect:
@@ -444,12 +470,17 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 			return true;
 		case eMethConnect:
 		{
-			int   portNumber = paParams[0].intVal;
-			DWORD bound      = paParams[1].intVal;
-			BYTE  deviceAdr  = paParams[2].ui8Val;
+			if (paParams[0].vt != VTYPE_PWSTR)
+				return false;
 
+			u16string name;
+			name.clear();
+			name.assign(reinterpret_cast<char16_t*>(paParams[0].pwstrVal), paParams[0].wstrLen);
+
+			long  bound     = paParams[1].intVal;
+			int   deviceAdr = paParams[2].ui8Val;
 			TV_VT(pvarRetValue) = VTYPE_BOOL;
-			//pvarRetValue->bVal = tenzom.OpenPort(portNumber, bound, deviceAdr);
+			pvarRetValue->bVal = tenzom.OpenPort(toUTF8(name), bound, deviceAdr);
 
 			return true;
 		}
@@ -469,18 +500,6 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 		{
 			TV_VT(pvarRetValue) = VTYPE_I4;
 			pvarRetValue->lVal = tenzom.GetNetto();
-			return true;
-		}
-		case eMethGetIndicatorText:
-		{
-			auto text = tenzom.GetIndicatorText();
-			std::basic_string<char16_t> wsIndicatorText = u"TODO!"; // TODO: GetIndicatorText !!!!
-
-			if (m_iMemory->AllocMemory((void**)&pvarRetValue->pwstrVal, (wsIndicatorText.length() + 1) * sizeof(char16_t)))
-			{
-				memcpy(pvarRetValue->pwstrVal, wsIndicatorText.c_str(), (wsIndicatorText.length() + 1) * sizeof(char16_t));
-				pvarRetValue->wstrLen = wsIndicatorText.length();
-			}
 			return true;
 		}
 		default:

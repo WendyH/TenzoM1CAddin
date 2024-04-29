@@ -10,6 +10,10 @@ int main()
 {
 	TenzoM tenzom;
 
+	string comports = tenzom.GetFreeComPorts();
+
+	printf("comports: %s\n", comports.c_str());
+
 	tenzom.Protocol = TenzoM::eProtocol643;
 
 	bool success = tenzom.OpenPort("COM4", 9600, 1);
@@ -17,11 +21,11 @@ int main()
 	if (success)
 	{
 		auto ves = tenzom.GetBrutto();
-		printf("ves: %d Calm: %s", ves, tenzom.Calm ? "true" : "false");
+		printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? "true" : "false");
 	}
 	else
 	{
-		printf("Error code: %d", tenzom.LastError);
+		printf("Error code: %d\n", tenzom.LastError);
 	}
 
 	return 0;

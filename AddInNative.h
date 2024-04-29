@@ -38,8 +38,8 @@ public:
         eMethSetZero,
         eMethGetNetto,
         eMethGetBrutto,
-        eMethGetIndicatorText,
         eMethSwitchToWeighing,
+        eMethGetPorts,
         eMethVersion,
         eMethLast      // Always last
     };
