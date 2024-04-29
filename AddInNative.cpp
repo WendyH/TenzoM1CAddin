@@ -6,6 +6,7 @@
 
 #include <string>
 #include <locale>
+#include <algorithm>
 #include <codecvt>
 #include <stdio.h>
 #include <wchar.h>
@@ -19,20 +20,28 @@ static const u16string sVersion(u"01.00");
 static const array<u16string, CAddInNative::ePropLast> osProps =
 {
 	u"Protocol",
+	u"IP",
+	u"NetPort",
+	u"WebPort",
 	u"Connected",
 	u"Adr",
 	u"Calm",
 	u"Overload",
-	u"ErrorCode"
-	u"Emulate",
+	u"Error",
+	u"ErrorCode",
+	u"Emulate"
 };
 static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 {
 	u"Протокол",
+	u"СетевойАдрес",
+	u"СетевойПорт",
+	u"ВебПорт",
 	u"Подключен",
 	u"АдресУстройства",
 	u"ВесСтабилен",
 	u"Перегрузка",
+	u"Ошибка",
 	u"КодОшибки",
 	u"РежимЭмуляции"
 };
@@ -63,6 +72,9 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"Версия"
 };
 
+uint32_t convToShortWchar(WCHAR_T** Dest, const wchar_t* Source, uint32_t len = 0);
+uint32_t convFromShortWchar(wchar_t** Dest, const WCHAR_T* Source, uint32_t len = 0);
+uint32_t getLenShortWcharStr(const WCHAR_T* Source);
 AppCapabilities g_capabilities = eAppCapabilitiesInvalid;
 
 template <typename T>
@@ -173,13 +185,15 @@ long CAddInNative::GetNProps()
 template<std::size_t SIZE>
 long FindInArrayCaseless(std::array<u16string, SIZE> arr, const WCHAR_T* name)
 {
-	auto len = wcslen(name);
+	wchar_t* wcName = 0;
+	convFromShortWchar(&wcName, name);
+	auto len = wcslen(wcName);
 	auto it = find_if(arr.begin(), arr.end(),
 		[&](auto& s) {
 			if (s.size() != len)
 				return false;
 			for (size_t i = 0; i < s.size(); ++i)
-				if (::tolower(s[i]) != ::tolower(name[i]))
+				if (::tolower(s[i]) != ::tolower(wcName[i]))
 					return false;
 			return true;
 		}
@@ -250,6 +264,36 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 		TV_I1(pvarPropVal) = tenzom.Protocol;
 		return true;
 	}
+	case ePropIP:
+	{
+		if (m_iMemory->AllocMemory((void**)&pvarPropVal->pwstrVal, (tenzom.IP.length() + 1) * sizeof(char16_t)))
+		{
+			memcpy(pvarPropVal->pwstrVal, tenzom.IP.c_str(), tenzom.IP.length() * sizeof(char16_t));
+			TV_VT(pvarPropVal)   = VTYPE_PWSTR;
+			pvarPropVal->wstrLen = tenzom.IP.length();
+			return true;
+		}
+		else
+		{
+			TV_VT(pvarPropVal)    = VTYPE_PWSTR;
+			pvarPropVal->pwstrVal = NULL;
+			pvarPropVal->wstrLen  = 0;
+			return true;
+		}
+		return true;
+	}
+	case ePropNetPort:
+	{
+		TV_VT(pvarPropVal) = VTYPE_I4;
+		TV_I4(pvarPropVal) = tenzom.NetPort;
+		return true;
+	}
+	case ePropWebPort:
+	{
+		TV_VT(pvarPropVal) = VTYPE_I4;
+		TV_I4(pvarPropVal) = tenzom.WebPort;
+		return true;
+	}
 	case ePropConnected:
 	{
 		TV_VT  (pvarPropVal) = VTYPE_BOOL;
@@ -266,6 +310,24 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 	{
 		TV_VT  (pvarPropVal) = VTYPE_BOOL;
 		TV_BOOL(pvarPropVal) = tenzom.Calm;
+		return true;
+	}
+	case ePropError:
+	{
+		if (m_iMemory->AllocMemory((void**)&pvarPropVal->pwstrVal, (tenzom.Error.length() + 1) * sizeof(char16_t)))
+		{
+			memcpy(pvarPropVal->pwstrVal, tenzom.Error.c_str(), tenzom.Error.length() * sizeof(char16_t));
+			TV_VT(pvarPropVal)   = VTYPE_PWSTR;
+			pvarPropVal->wstrLen = tenzom.Error.length();
+			return true;
+		}
+		else
+		{
+			TV_VT(pvarPropVal)    = VTYPE_PWSTR;
+			pvarPropVal->pwstrVal = NULL;
+			pvarPropVal->wstrLen  = 0;
+			return true;
+		}
 		return true;
 	}
 	case ePropErrorCode:
@@ -302,9 +364,40 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 		tenzom.Protocol = static_cast<TenzoM::ProtocolType>(TV_I1(varPropVal));
 		return true;
 	}
+	case ePropIP:
+	{
+		u16string sPattern;
+		sPattern.clear();
+		sPattern.assign(reinterpret_cast<char16_t*>(varPropVal->pwstrVal), varPropVal->wstrLen);
+
+		//u16string ip(reinterpret_cast<char16_t*>(varPropVal->pwstrVal), varPropVal->wstrLen);
+		//string ip(reinterpret_cast<char*>(varPropVal->pwstrVal), varPropVal->wstrLen);
+		tenzom.IP = sPattern.b;
+		return true;
+	}
+	case ePropNetPort:
+	{
+		tenzom.NetPort = TV_I4(varPropVal);
+		return true;
+	}
+	case ePropWebPort:
+	{
+		tenzom.WebPort = TV_I4(varPropVal);
+		return true;
+	}
+	case ePropConnected:
+	{
+		return true;
+	}
 	case ePropAdr:
 	{
 		tenzom.Adr = TV_I1(varPropVal);
+		return true;
+	}
+	case ePropError:
+	{
+		u16string text(reinterpret_cast<char16_t*>(varPropVal->pwstrVal), varPropVal->wstrLen);
+		tenzom.Error = toUTF8(text);
 		return true;
 	}
 	case ePropErrorCode:
@@ -334,7 +427,11 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	switch (lPropNum)
 	{
 	case ePropProtocol:
+	case ePropIP:
+	case ePropNetPort:
+	case ePropWebPort:
 	case ePropAdr:
+	case ePropError:
 	case ePropErrorCode:
 	case ePropEmulate:
 		return true;
@@ -540,13 +637,95 @@ bool CAddInNative::setMemManager(void* mem)
 	return m_iMemory != 0;
 }
 
-void CAddInNative::version(tVariant * pvarRetValue)
+//---------------------------------------------------------------------------//
+uint32_t convToShortWchar(WCHAR_T** Dest, const wchar_t* Source, uint32_t len)
+{
+	if (!len)
+		len = ::wcslen(Source) + 1;
+
+	if (!*Dest)
+		*Dest = new WCHAR_T[len];
+
+	WCHAR_T* tmpShort = *Dest;
+	wchar_t* tmpWChar = (wchar_t*)Source;
+	uint32_t res = 0;
+
+	::memset(*Dest, 0, len * sizeof(WCHAR_T));
+#ifdef __linux__
+	size_t succeed = (size_t)-1;
+	size_t f = len * sizeof(wchar_t), t = len * sizeof(WCHAR_T);
+	const char* fromCode = sizeof(wchar_t) == 2 ? "UTF-16" : "UTF-32";
+	iconv_t cd = iconv_open("UTF-16LE", fromCode);
+	if (cd != (iconv_t)-1)
+	{
+		succeed = iconv(cd, (char**)&tmpWChar, &f, (char**)&tmpShort, &t);
+		iconv_close(cd);
+		if (succeed != (size_t)-1)
+			return (uint32_t)succeed;
+	}
+#endif //__linux__
+	for (; len; --len, ++res, ++tmpWChar, ++tmpShort)
+	{
+		*tmpShort = (WCHAR_T)*tmpWChar;
+	}
+
+	return res;
+}
+//---------------------------------------------------------------------------//
+uint32_t convFromShortWchar(wchar_t** Dest, const WCHAR_T* Source, uint32_t len)
+{
+	if (!len)
+		len = getLenShortWcharStr(Source) + 1;
+
+	if (!*Dest)
+		*Dest = new wchar_t[len];
+
+	wchar_t* tmpWChar = *Dest;
+	WCHAR_T* tmpShort = (WCHAR_T*)Source;
+	uint32_t res = 0;
+
+	::memset(*Dest, 0, len * sizeof(wchar_t));
+#ifdef __linux__
+	size_t succeed = (size_t)-1;
+	const char* fromCode = sizeof(wchar_t) == 2 ? "UTF-16" : "UTF-32";
+	size_t f = len * sizeof(WCHAR_T), t = len * sizeof(wchar_t);
+	iconv_t cd = iconv_open("UTF-32LE", fromCode);
+	if (cd != (iconv_t)-1)
+	{
+		succeed = iconv(cd, (char**)&tmpShort, &f, (char**)&tmpWChar, &t);
+		iconv_close(cd);
+		if (succeed != (size_t)-1)
+			return (uint32_t)succeed;
+	}
+#endif //__linux__
+	for (; len; --len, ++res, ++tmpWChar, ++tmpShort)
+	{
+		*tmpWChar = (wchar_t)*tmpShort;
+	}
+
+	return res;
+}
+//---------------------------------------------------------------------------//
+uint32_t getLenShortWcharStr(const WCHAR_T* Source)
+{
+	uint32_t res = 0;
+	WCHAR_T* tmpShort = (WCHAR_T*)Source;
+
+	while (*tmpShort++)
+		++res;
+
+	return res;
+}
+//---------------------------------------------------------------------------//
+
+void CAddInNative::version(tVariant* pvarRetValue)
 {
 	TV_VT(pvarRetValue) = VTYPE_PWSTR;
-	
+
 	if (m_iMemory->AllocMemory((void**)&pvarRetValue->pwstrVal, (sVersion.length() + 1) * sizeof(char16_t)))
 	{
 		memcpy(pvarRetValue->pwstrVal, sVersion.c_str(), (sVersion.length() + 1) * sizeof(char16_t));
 		pvarRetValue->wstrLen = sVersion.length();
 	}
 }
+

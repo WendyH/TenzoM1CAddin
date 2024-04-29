@@ -4,16 +4,16 @@ else
 CPU = 64
 endif
 
-SOURCES=AddInNative.cpp StrConv.cpp json.cpp
+SOURCES=AddInNative.cpp StrConv.cpp
+
+TARGETDIR = "$(CURDIR)/Package/"
 
 ifeq ($(macos),1)
-TARGETDIR = "$(CURDIR)/macos/"
-TARGET = $(TARGETDIR)RegExMac64.so
+TARGET = $(TARGETDIR)TenzoM1CAddinMac.so
 LIBPATHS = -Llib/macos/
 LIBS= 
 else
-TARGETDIR = $(CURDIR)/linux/x$(CPU)/
-TARGET = $(TARGETDIR)RegEx$(CPU).so
+TARGET = $(TARGETDIR)TenzoM1CAddin$(CPU).so
 LIBPATHS = -Llib/linux/x$(CPU)/
 LIBS= 
 endif

@@ -26,7 +26,7 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/jnienv.cpp ${PROJECT_SOURCE_DIR}../../../json.cpp ${PROJECT_SOURCE_DIR}../../../StrConv.cpp ${PROJECT_SOURCE_DIR}../../../AddInNative.cpp)
+             src/main/cpp/jnienv.cpp ${PROJECT_SOURCE_DIR}../../../StrConv.cpp ${PROJECT_SOURCE_DIR}../../../AddInNative.cpp)
 
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by

@@ -1,6 +1,12 @@
 #include <random>
 #include "TenzoM.h"
 
+#if defined(_WIN64) || defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__WINDOWS__) || defined(__TOS_WIN__) || defined(__CYGWIN__)
+    #define TM_WINDOWS 
+#elif defined(unix) || defined(__unix) || defined(__unix__)
+    #define TM_LINUX
+#endif
+
 using namespace std;
 
 #define MAX_RECV_BYTES 1024*4
@@ -12,7 +18,7 @@ using namespace std;
 /// <param name="boud"></param>
 /// <param name="boud"></param>
 /// <returns></returns>
-bool TenzoM::OpenPort(string comName, long boud, int deviceAddress)
+bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
 {
     Adr = deviceAddress;
 
@@ -37,8 +43,7 @@ bool TenzoM::OpenPort(string comName, long boud, int deviceAddress)
         }
     }
 
-    if (!success)
-        LastError = GetLastError();
+    if (!success) CheckLastError();
 
     return success;
 }
@@ -104,13 +109,15 @@ bool TenzoM::SendCommand(char command)
         break;
     }
 
+    if (!success) CheckLastError();
+
     return success;
 }
 
 /// <summary>
 /// Получить ответ от весов в указанный буфер.
 /// </summary>
-/// <returns>Возвращает количество считанных байт в буфер. Если 0 - тогда проверять статус или LastError.</returns>
+/// <returns>Возвращает количество считанных байт в буфер</returns>
 long TenzoM::Receive(vector<char>& readBuffer)
 {
     long readBytes    = 0;
@@ -241,32 +248,6 @@ int TenzoM::ExtractWeight(vector<char>& readBuffer)
     return weight * multiplier;
 }
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-
-/// <summary>
-/// Получить зафикированный вес брутто
-/// </summary>
-/// <returns>Возвращает зафикированный вес брутто</returns>
-int TenzoM::GetFixedBrutto()
-{
-    int fixedBrutto = 0;
-
-    if (Protocol == eProtocolTenzoM)
-    {
-        if (SendCommand('\xB8'))
-        {
-            vector<char> readBuffer;
-            if (Receive(readBuffer))
-            {
-                fixedBrutto = ExtractWeight(readBuffer);
-            }
-        }
-    }
-
-    return fixedBrutto;
-}
-
 /// <summary>
 /// Получить состояние весоизмерительной системы
 /// </summary>
@@ -329,41 +310,10 @@ bool TenzoM::SetZero()
 }
 
 /// <summary>
-/// Получить вес НЕТТО
+/// Получить вес
 /// </summary>
-/// <returns>Возвращает вес НЕТТО</returns>
-int TenzoM::GetNetto()
-{
-    if (Emulate) return RandomWeight();
-
-    if (Protocol == eProtocol643)
-    {
-        return GetWeight643();
-    }
-
-    int netto = 0;
-
-    if (Protocol == eProtocolTenzoM)
-    {
-        if (SendCommand('\xC2'))
-        {
-            vector<char> readBuffer;
-            if (Receive(readBuffer))
-            {
-                netto = ExtractWeight(readBuffer);
-            }
-        }
-
-    }
-
-    return netto;
-}
-
-/// <summary>
-/// Получить вес БРУТТО
-/// </summary>
-/// <returns>Возвращает вес БРУТТО</returns>
-int TenzoM::GetBrutto()
+/// <returns>Возвращает вес брутто</returns>
+int TenzoM::GetWeight()
 {
     if (Emulate) return RandomWeight();
 
@@ -390,6 +340,10 @@ int TenzoM::GetBrutto()
     return brutto;
 }
 
+
+/// <summary>
+/// Переключить в режим взвешивания
+/// </summary>
 void TenzoM::SwitchToWeighing()
 {
     bool success;
@@ -426,25 +380,26 @@ void TenzoM::SwitchToWeighing()
 /// Получение списка доступных COM-портов
 /// </summary>
 /// <returns>Возвращается строка с именами доступных COM-портов, разделёнными точкой с запятой.</returns>
-string TenzoM::GetFreeComPorts()
+u16string TenzoM::GetFreeComPorts()
 {
-    string ports = "";
-    ceSerial _com;
+    u16string ports = { 0 };
+    ceSerial  _com;
     
     for (int i = 1; i < 255; i++)
     {
-        string name = "COM" + to_string(i);
-        _com.SetPortName(name);
+        char16_t name[14];
+        swprintf_s(reinterpret_cast<wchar_t*>(name), 14, L"COM%d", i);
+        _com.SetPortName(reinterpret_cast<char*>(name));
         _com.Open();
         if (_com.Open() == 0)
         {
             if (ports.size() > 0)
-                ports += ";";
+                ports += u";";
             _com.Close();
             ports += name;
         }
     }
-    return string(ports);
+    return u16string(ports);
 }
 
 /// <summary>
@@ -524,7 +479,29 @@ int TenzoM::GetWeight643()
         }
     }
     
-    if (!success) LastError = GetLastError();
+    if (!success) CheckLastError();
 
     return brutto;
+}
+
+void TenzoM::CheckLastError()
+{
+    LastError = 0;
+    Error.clear();
+    #ifdef CE_WINDOWS
+        LastError = GetLastError();
+        if (LastError != 0)
+        {
+            LPSTR messageBuffer = nullptr;
+            size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                NULL, LastError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
+            Error.assign(reinterpret_cast<char16_t>(messageBuffer), size);
+            LocalFree(messageBuffer);
+        }
+        
+    #endif
+    #ifdef TM_LINUX
+        LastError = errno;
+        Error = strerror(errno);
+    #endif
 }

@@ -21,10 +21,14 @@ public:
     enum Props
     {
         ePropProtocol = 0,
+        ePropIP,
+        ePropNetPort,
+        ePropWebPort,
         ePropConnected,
         ePropAdr,
         ePropCalm,
         ePropOverload,
+        ePropError,
         ePropErrorCode,
         ePropEmulate,
         ePropLast      // Always last

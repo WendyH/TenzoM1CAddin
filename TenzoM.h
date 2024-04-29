@@ -28,6 +28,7 @@ private:
 	int  ExtractWeight(vector<char>& readBuffer);
 	int  GetWeight643();
 	int  RandomWeight();
+	void CheckLastError();
 
 public:
 	enum ProtocolType
@@ -45,27 +46,28 @@ public:
 
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
 	
-	unsigned char Adr = 1;  // Адрес устройства
+	unsigned char Adr = 1; // Адрес устройства
 
-	bool Calm     = false;  // Вес стабилен
-	bool Overload = false;  // Флаг перегрузки
-	bool Emulate  = false;  // Режим эмуляции
+	bool Calm     = false; // Вес стабилен
+	bool Overload = false; // Флаг перегрузки
+	bool Emulate  = false; // Режим эмуляции
 
-	string IP      = { 0 }; // IP-адрес для протоколов web или net
-	int    NetPort = 5001;  // Порт для протокола net
-	int    WebPort = 8080;  // Порт для протокола web
+	u16string IP      = { 0 }; // IP-адрес для протоколов web или net
+	int       NetPort = 5001;  // Порт для протокола net
+	int       WebPort = 8080;  // Порт для протокола web
 
 	unsigned long LastError	 = 0;
+	u16string Error = { 0 };
 
-	bool OpenPort(string comName, long boud, int deviceAddress);
+	bool OpenPort(u16string comName, long boud, int deviceAddress);
 	void ClosePort();
 	bool PortOpened();
 
 	TenzoMSTATUS GetStatus();
-	int    GetFixedBrutto();
-	bool   SetZero();
-	int    GetNetto();
-	int    GetBrutto();
-	void   SwitchToWeighing();
-	string GetFreeComPorts();
+	bool         SetZero();
+	int          GetWeight();
+	int          GetWeight(u16string name);
+	int          GetWeight(unsigned char deviceAdr);
+	void         SwitchToWeighing();
+	u16string    GetFreeComPorts();
 };
