@@ -20,7 +20,8 @@ class CAddInNative : public IComponentBase
 public:
     enum Props
     {
-        ePropConnected = 0,
+        ePropProtocol = 0,
+        ePropConnected,
         ePropAdr,
         ePropCalm,
         ePropOverload,

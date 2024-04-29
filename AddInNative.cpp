@@ -16,6 +16,26 @@ using namespace std;
 static const u16string sClassName(u"TenzoM");
 static const u16string sVersion(u"01.00");
 
+static const array<u16string, CAddInNative::ePropLast> osProps =
+{
+	u"Protocol",
+	u"Connected",
+	u"Adr",
+	u"Calm",
+	u"Overload",
+	u"ErrorCode"
+	u"Emulate",
+};
+static const array<u16string, CAddInNative::ePropLast> osProps_ru =
+{
+	u"Протокол",
+	u"Подключен",
+	u"АдресУстройства",
+	u"ВесСтабилен",
+	u"Перегрузка",
+	u"КодОшибки",
+	u"РежимЭмуляции"
+};
 static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
 	u"Connect",
@@ -41,24 +61,6 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"ПереключитьВРежимВзвешивания",
 	u"ПолучитьДоступныеПорты",
 	u"Версия"
-};
-static const array<u16string, CAddInNative::ePropLast> osProps =
-{ 
-	u"Connected",
-	u"Adr",
-	u"Calm", 
-	u"Overload", 
-	u"ErrorCode" 
-	u"Emulate",
-};
-static const array<u16string, CAddInNative::ePropLast> osProps_ru =
-{ 
-	u"Подключен",
-	u"АдресУстройства",
-	u"ВесСтабилен",
-	u"Перегрузка", 
-	u"КодОшибки", 
-	u"РежимЭмуляции"
 };
 
 AppCapabilities g_capabilities = eAppCapabilitiesInvalid;
@@ -242,6 +244,12 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 {
 	switch (lPropNum)
 	{
+	case ePropProtocol:
+	{
+		TV_VT(pvarPropVal) = VTYPE_I1;
+		TV_I1(pvarPropVal) = tenzom.Protocol;
+		return true;
+	}
 	case ePropConnected:
 	{
 		TV_VT  (pvarPropVal) = VTYPE_BOOL;
@@ -289,6 +297,11 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 {
 	switch (lPropNum)
 	{
+	case ePropProtocol:
+	{
+		tenzom.Protocol = static_cast<TenzoM::ProtocolType>(TV_I1(varPropVal));
+		return true;
+	}
 	case ePropAdr:
 	{
 		tenzom.Adr = TV_I1(varPropVal);
@@ -320,6 +333,7 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 {
 	switch (lPropNum)
 	{
+	case ePropProtocol:
 	case ePropAdr:
 	case ePropErrorCode:
 	case ePropEmulate:
