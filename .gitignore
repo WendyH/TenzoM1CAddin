@@ -369,7 +369,6 @@ bind/
 bind64/
 build/
 build64/
-Package/
 out/
 Release/
 testTenzoM/
