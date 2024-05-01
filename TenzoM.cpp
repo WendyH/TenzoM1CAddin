@@ -1,3 +1,7 @@
+#include <iostream>
+#include <string>
+#include <locale>
+#include <codecvt>
 #include <random>
 #include "TenzoM.h"
 
@@ -14,11 +18,11 @@ using namespace std;
 /// <summary>
 /// Открыть COM порт для общения с устройствами тензотермическими датчиками
 /// </summary>
-/// <param name="comName"></param>
-/// <param name="boud"></param>
-/// <param name="boud"></param>
-/// <returns></returns>
-bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
+/// <param name="comName">Имя COM-порта в виде "COM1" для Windows или "tty1" для Linux</param>
+/// <param name="boud">Скорость обмена (бод)</param>
+/// <param name="deviceAddress">Адрес устройсва, как он прописан в самих весах</param>
+/// <returns>Возвращает true, если порт успешно открыт</returns>
+bool TenzoM::OpenPort(string comName, long boud, int deviceAddress)
 {
     Adr = deviceAddress;
 
@@ -380,26 +384,29 @@ void TenzoM::SwitchToWeighing()
 /// Получение списка доступных COM-портов
 /// </summary>
 /// <returns>Возвращается строка с именами доступных COM-портов, разделёнными точкой с запятой.</returns>
-u16string TenzoM::GetFreeComPorts()
+string TenzoM::GetFreeComPorts()
 {
-    u16string ports = { 0 };
+    string ports = { 0 };
     ceSerial  _com;
-    
-    for (int i = 1; i < 255; i++)
-    {
-        char16_t name[14];
-        swprintf_s(reinterpret_cast<wchar_t*>(name), 14, L"COM%d", i);
-        _com.SetPortName(reinterpret_cast<char*>(name));
-        _com.Open();
-        if (_com.Open() == 0)
+    #ifdef CE_WINDOWS
+        for (int i = 1; i < 255; i++)
         {
-            if (ports.size() > 0)
-                ports += u";";
-            _com.Close();
-            ports += name;
+            string name = "COM" + i;
+            _com.SetPortName(name);
+            _com.Open();
+            if (_com.Open() == 0)
+            {
+                if (ports.size() > 0)
+                    ports += ";";
+                _com.Close();
+                ports += name;
+            }
         }
-    }
-    return u16string(ports);
+    #endif
+    #ifdef TM_LINUX
+    #endif
+    
+    return string(ports);
 }
 
 /// <summary>
@@ -493,15 +500,17 @@ void TenzoM::CheckLastError()
         if (LastError != 0)
         {
             LPSTR messageBuffer = nullptr;
-            size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            const size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                 NULL, LastError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
-            Error.assign(reinterpret_cast<char16_t>(messageBuffer), size);
+
+            string errorText(messageBuffer);
+            Error.assign(errorText.begin(), errorText.end());
+
             LocalFree(messageBuffer);
         }
-        
     #endif
     #ifdef TM_LINUX
         LastError = errno;
-        Error = strerror(errno);
+        Error     = strerror(errno);
     #endif
 }

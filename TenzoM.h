@@ -46,28 +46,26 @@ public:
 
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
 	
-	unsigned char Adr = 1; // Адрес устройства
+	unsigned char Adr = 1;  // Адрес устройства
 
-	bool Calm     = false; // Вес стабилен
-	bool Overload = false; // Флаг перегрузки
-	bool Emulate  = false; // Режим эмуляции
+	bool Calm     = false;  // Вес стабилен
+	bool Overload = false;  // Флаг перегрузки
+	bool Emulate  = false;  // Режим эмуляции
 
-	u16string IP      = { 0 }; // IP-адрес для протоколов web или net
-	int       NetPort = 5001;  // Порт для протокола net
-	int       WebPort = 8080;  // Порт для протокола web
+	string IP      = "127.0.0.1"; // IP-адрес для протоколов web или net
+	int    NetPort = 5001;  // Порт для протокола net
+	int    WebPort = 8080;  // Порт для протокола web
 
 	unsigned long LastError	 = 0;
-	u16string Error = { 0 };
+	string Error = { 0 };
 
-	bool OpenPort(u16string comName, long boud, int deviceAddress);
+	bool OpenPort(string comName, long boud, int deviceAddress);
 	void ClosePort();
 	bool PortOpened();
 
 	TenzoMSTATUS GetStatus();
 	bool         SetZero();
 	int          GetWeight();
-	int          GetWeight(u16string name);
-	int          GetWeight(unsigned char deviceAdr);
 	void         SwitchToWeighing();
-	u16string    GetFreeComPorts();
+	string       GetFreeComPorts();
 };

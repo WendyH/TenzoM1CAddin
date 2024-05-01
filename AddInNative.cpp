@@ -1,5 +1,7 @@
 ﻿#if !defined( __linux__ ) && !defined(__APPLE__) && !defined(__ANDROID__)
 #include "stdafx.h"
+#else
+#include <iconv.h>
 #endif
 
 #define CE_SERIAL_IMPLEMENTATION
@@ -9,7 +11,7 @@
 #include <algorithm>
 #include <codecvt>
 #include <stdio.h>
-#include <wchar.h>
+#include <cuchar>
 #include "AddInNative.h"
 #include "TenzoM.h"
 using namespace std;
@@ -49,11 +51,9 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
 	u"Connect",
 	u"Disconnect",
-	u"GetFixedBrutto",
 	u"GetStatus",
 	u"SetZero",
-	u"GetNetto",
-	u"GetBrutto",
+	u"GetWeight",
 	u"SwitchToWeighing",
 	u"GetPorts",
 	u"Version",
@@ -62,11 +62,9 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 { 
 	u"Подключиться", 
 	u"Отключиться", 
-	u"ПолучитьФиксированныйВесБрутто", 
 	u"ПолучитьСтатус", 
 	u"ОбнулитьПоказанияВеса", 
-	u"ПолучитьВесНетто",
-	u"ПолучитьВесБрутто",
+	u"ПолучитьВес",
 	u"ПереключитьВРежимВзвешивания",
 	u"ПолучитьДоступныеПорты",
 	u"Версия"
@@ -134,6 +132,10 @@ CAddInNative::CAddInNative()
 {
 	m_iMemory  = 0;
 	m_iConnect = 0;
+#ifdef _DEBUG
+	tenzom.IP = "Проверка строк!";
+#endif
+
 }
 //---------------------------------------------------------------------------//
 CAddInNative::~CAddInNative()
@@ -266,20 +268,7 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 	}
 	case ePropIP:
 	{
-		if (m_iMemory->AllocMemory((void**)&pvarPropVal->pwstrVal, (tenzom.IP.length() + 1) * sizeof(char16_t)))
-		{
-			memcpy(pvarPropVal->pwstrVal, tenzom.IP.c_str(), tenzom.IP.length() * sizeof(char16_t));
-			TV_VT(pvarPropVal)   = VTYPE_PWSTR;
-			pvarPropVal->wstrLen = tenzom.IP.length();
-			return true;
-		}
-		else
-		{
-			TV_VT(pvarPropVal)    = VTYPE_PWSTR;
-			pvarPropVal->pwstrVal = NULL;
-			pvarPropVal->wstrLen  = 0;
-			return true;
-		}
+		SetPropString(pvarPropVal, tenzom.IP);
 		return true;
 	}
 	case ePropNetPort:
@@ -314,20 +303,7 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 	}
 	case ePropError:
 	{
-		if (m_iMemory->AllocMemory((void**)&pvarPropVal->pwstrVal, (tenzom.Error.length() + 1) * sizeof(char16_t)))
-		{
-			memcpy(pvarPropVal->pwstrVal, tenzom.Error.c_str(), tenzom.Error.length() * sizeof(char16_t));
-			TV_VT(pvarPropVal)   = VTYPE_PWSTR;
-			pvarPropVal->wstrLen = tenzom.Error.length();
-			return true;
-		}
-		else
-		{
-			TV_VT(pvarPropVal)    = VTYPE_PWSTR;
-			pvarPropVal->pwstrVal = NULL;
-			pvarPropVal->wstrLen  = 0;
-			return true;
-		}
+		SetPropString(pvarPropVal, tenzom.Error);
 		return true;
 	}
 	case ePropErrorCode:
@@ -366,13 +342,7 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 	}
 	case ePropIP:
 	{
-		u16string sPattern;
-		sPattern.clear();
-		sPattern.assign(reinterpret_cast<char16_t*>(varPropVal->pwstrVal), varPropVal->wstrLen);
-
-		//u16string ip(reinterpret_cast<char16_t*>(varPropVal->pwstrVal), varPropVal->wstrLen);
-		//string ip(reinterpret_cast<char*>(varPropVal->pwstrVal), varPropVal->wstrLen);
-		tenzom.IP = sPattern.b;
+		tenzom.IP = GetParamString(varPropVal);
 		return true;
 	}
 	case ePropNetPort:
@@ -396,8 +366,7 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 	}
 	case ePropError:
 	{
-		u16string text(reinterpret_cast<char16_t*>(varPropVal->pwstrVal), varPropVal->wstrLen);
-		tenzom.Error = toUTF8(text);
+		tenzom.Error = GetParamString(varPropVal);
 		return true;
 	}
 	case ePropErrorCode:
@@ -521,10 +490,8 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 	switch (lMethodNum)
 	{
 	case eMethConnect:
-	case eMethGetFixedBrutto:
 	case eMethGetStatus:
-	case eMethGetNetto:
-	case eMethGetBrutto:
+	case eMethGetWeight:
 	case eMethGetPorts:
 	case eMethVersion:
 		return true;
@@ -542,16 +509,10 @@ bool CAddInNative::CallAsProc(const long lMethodNum,
 	{
 	case eMethConnect:
 	{
-		if (paParams[0].vt != VTYPE_PWSTR)
-			return false;
-
-		u16string name;
-		name.clear();
-		name.assign(reinterpret_cast<char16_t*>(paParams[0].pwstrVal), paParams[0].wstrLen);
-
+		string name     = GetParamString(&paParams[0]);
 		long  bound     = paParams[1].intVal;
 		int   deviceAdr = paParams[2].ui8Val;
-		tenzom.OpenPort(toUTF8(name), bound, deviceAdr);
+		tenzom.OpenPort(name, bound, deviceAdr);
 		return true;
 	}
 	case eMethDisconnect:
@@ -577,40 +538,21 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 	switch (lMethodNum)
 	{
 		case eMethVersion:
-			version(pvarRetValue);
+			SetPropString(pvarRetValue, sVersion);
 			return true;
 		case eMethConnect:
 		{
-			if (paParams[0].vt != VTYPE_PWSTR)
-				return false;
-
-			u16string name;
-			name.clear();
-			name.assign(reinterpret_cast<char16_t*>(paParams[0].pwstrVal), paParams[0].wstrLen);
-
-			long  bound     = paParams[1].intVal;
-			int   deviceAdr = paParams[2].ui8Val;
-			TV_VT(pvarRetValue) = VTYPE_BOOL;
-			pvarRetValue->bVal = tenzom.OpenPort(toUTF8(name), bound, deviceAdr);
-
+			string name      = GetParamString(&paParams[0]);
+			long   bound     = paParams[1].intVal;
+			int    deviceAdr = paParams[2].ui8Val;
+			TV_VT  (pvarRetValue) = VTYPE_BOOL;
+			TV_BOOL(pvarRetValue) = tenzom.OpenPort(name, bound, deviceAdr);
 			return true;
 		}
-		case eMethGetBrutto:
+		case eMethGetWeight:
 		{
 			TV_VT(pvarRetValue) = VTYPE_I4;
-			pvarRetValue->lVal  = tenzom.GetBrutto();
-			return true;
-		}
-		case eMethGetFixedBrutto:
-		{
-			TV_VT(pvarRetValue) = VTYPE_I4;
-			pvarRetValue->lVal = tenzom.GetFixedBrutto();
-			return true;
-		}
-		case eMethGetNetto:
-		{
-			TV_VT(pvarRetValue) = VTYPE_I4;
-			pvarRetValue->lVal = tenzom.GetNetto();
+			TV_I4(pvarRetValue) = tenzom.GetWeight();
 			return true;
 		}
 		default:
@@ -718,14 +660,57 @@ uint32_t getLenShortWcharStr(const WCHAR_T* Source)
 }
 //---------------------------------------------------------------------------//
 
-void CAddInNative::version(tVariant* pvarRetValue)
+string CAddInNative::GetParamString(tVariant * param)
 {
-	TV_VT(pvarRetValue) = VTYPE_PWSTR;
+	string name;
 
-	if (m_iMemory->AllocMemory((void**)&pvarRetValue->pwstrVal, (sVersion.length() + 1) * sizeof(char16_t)))
+	if (param->vt == VTYPE_PWSTR)
 	{
-		memcpy(pvarRetValue->pwstrVal, sVersion.c_str(), (sVersion.length() + 1) * sizeof(char16_t));
-		pvarRetValue->wstrLen = sVersion.length();
+		wchar_t* prop = 0;
+		#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
+			name = u16Convert.to_bytes(param->pwstrVal);  
+		#else
+			size_t len = ::convFromShortWchar(&prop, param->pwstrVal);
+			const size_t size_need = wcstombs(NULL, prop, len);
+			string text(size_need, 0);
+			wcstombs(&text.at(0), prop, len);
+			name.assign(text.begin(), text.end());
+		#endif
+	}
+	else if (param->vt == VTYPE_PSTR)
+	{
+		name = string(param->pstrVal);
+	}
+
+	return string(name);
+}
+//---------------------------------------------------------------------------//
+void CAddInNative::SetPropString(tVariant* pvarRetValue, u16string text)
+{
+	if (m_iMemory->AllocMemory((void**)&pvarRetValue->pwstrVal, (text.length() + 1) * sizeof(char16_t)))
+	{
+		memcpy(pvarRetValue->pwstrVal, text.c_str(), text.length() * sizeof(char16_t));
+		TV_VT(pvarRetValue)   = VTYPE_PWSTR;
+		pvarRetValue->wstrLen = text.length();
+	}
+	else
+	{
+		TV_VT(pvarRetValue) = VTYPE_PWSTR;
+		pvarRetValue->pwstrVal = NULL;
+		pvarRetValue->wstrLen  = 0;
 	}
 }
-
+//---------------------------------------------------------------------------//
+void CAddInNative::SetPropString(tVariant* pvarRetValue, string text)
+{
+	#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
+		u16string wcText = u16Convert.from_bytes(text);
+	#else
+		int count = MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), NULL, 0);
+		wstring wstr(count, 0);
+		MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), &wstr.at(0), count);
+		u16string wcText(wstr.begin(), wstr.end());
+	#endif
+	SetPropString(pvarRetValue, wcText);
+}
+//---------------------------------------------------------------------------//

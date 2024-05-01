@@ -24,9 +24,6 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="StrConv.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="TenzoM.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -41,9 +38,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="stdafx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="StrConv.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TenzoM.h">

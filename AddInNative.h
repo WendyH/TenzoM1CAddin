@@ -10,7 +10,6 @@
 #include <array> 
 #include <locale.h>
 
-#include "StrConv.h"
 #include "TenzoM.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -38,11 +37,9 @@ public:
     {
         eMethConnect = 0,
         eMethDisconnect,
-        eMethGetFixedBrutto,
         eMethGetStatus,
         eMethSetZero,
-        eMethGetNetto,
-        eMethGetBrutto,
+        eMethGetWeight,
         eMethSwitchToWeighing,
         eMethGetPorts,
         eMethVersion,
@@ -81,11 +78,15 @@ public:
     virtual void ADDIN_API SetLocale(const WCHAR_T* loc);
     
 private:
-	void version(tVariant* pvarRetValue);
+    string GetParamString(tVariant* param);
+    void   SetPropString(tVariant* pvarPropVal, string text);
+    void   SetPropString(tVariant* pvarPropVal, u16string text);
 
     // Attributes
     IAddInDefBase      *m_iConnect;
     IMemoryManager     *m_iMemory;
+
+    wstring_convert<codecvt_utf8_utf16<char16_t, 0x10ffff, codecvt_mode::little_endian>, char16_t> u16Convert;
 
     TenzoM tenzom;
 };

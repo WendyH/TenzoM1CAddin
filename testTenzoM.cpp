@@ -7,11 +7,20 @@
 #include "TenzoM.cpp"
 #endif
 
+#pragma execution_character_set("utf-8")
 
 using namespace std;
 
 int main()
 {
+	printf("Проверка.");
+
+	#if defined( __linux__ )
+	setlocale(LC_ALL, "ru_RU.UTF-8");
+	#else
+	SetConsoleOutputCP(65001);
+	#endif
+
 	TenzoM tenzom;
 
 	auto comports = tenzom.GetFreeComPorts();
@@ -20,7 +29,11 @@ int main()
 
 	tenzom.Protocol = TenzoM::eProtocol643;
 
-	bool success = tenzom.OpenPort(u"COM4", 9600, 1);
+	tenzom.IP = "Проврка русского!";
+
+	bool success = tenzom.OpenPort("COM4", 9600, 1);
+
+	auto text = tenzom.Error;
 
 	if (success)
 	{
@@ -29,7 +42,7 @@ int main()
 	}
 	else
 	{
-		printf("Error code: %d\n", (int)tenzom.LastError);
+		printf("Error code: %d Message: %s\n", (int)tenzom.LastError, tenzom.Error.c_str());
 	}
 
 	return 0;

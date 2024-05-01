@@ -4,7 +4,7 @@ else
 CPU = 64
 endif
 
-SOURCES=AddInNative.cpp StrConv.cpp
+SOURCES=TenzoM.cpp AddInNative.cpp
 
 TARGETDIR = "$(CURDIR)/Package/"
 
