@@ -22,34 +22,171 @@ using namespace std;
 /// <param name="boud">Скорость обмена (бод)</param>
 /// <param name="deviceAddress">Адрес устройсва, как он прописан в самих весах</param>
 /// <returns>Возвращает true, если порт успешно открыт</returns>
-bool TenzoM::OpenPort(string comName, long boud, int deviceAddress)
+bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
 {
+    LastError = 0;
+    Error.clear();
+
+    bool success = false;
     Adr = deviceAddress;
 
     if (Emulate) return true;
 
-    com.SetBaudRate(boud);
-    com.SetPortName(comName);
+    SECURITY_ATTRIBUTES sa;
+    ZeroMemory(&sa, sizeof(sa));
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
 
-    bool success = (com.Open() == 0);
+    wstring comID = L"\\\\.\\" + comName;
 
-    if (success && (Protocol == eProtocol643))
-    {
-        // Активация терминала. Посылаем 01 с адресом устройсва как строка из 4 цифр.
-        // Работать с весами можно через 20 мс.
-        vector<char> message = { '\x01', '\x30', '\x30', '\x30', '\x31', '\x00'};
-        snprintf(&message.at(1), 5, "%04d", (int)Adr);
-        success = com.Write(&message.at(0), 5);
+    port = CreateFileW(comID.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
+
+    if (port == INVALID_HANDLE_VALUE) {
+        success = false;
+        CheckLastError();
+        return false;
+    }
+    success = true;
+
+    EscapeCommFunction(port, SETDTR);
+
+    DCB dcb = { 0 };
+    dcb.DCBlength = sizeof(dcb);
+    GetCommState(port, &dcb);
+    dcb.BaudRate      = boud;
+    dcb.fBinary       = TRUE;
+    dcb.fAbortOnError = TRUE;
+    dcb.ByteSize      = 8;
+    dcb.Parity        = NOPARITY;
+    dcb.StopBits      = ONESTOPBIT;
+    SetCommState(port, &dcb);
+
+    PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+
+    COMMTIMEOUTS commTimeouts;
+    if (GetCommTimeouts(port, &commTimeouts)) {
+        commTimeouts.ReadIntervalTimeout         = MAXDWORD;
+        commTimeouts.ReadTotalTimeoutMultiplier  = 10;
+        commTimeouts.ReadTotalTimeoutConstant    = 50;
+        commTimeouts.WriteTotalTimeoutMultiplier = 10;
+        commTimeouts.WriteTotalTimeoutConstant   = 50;
+        SetCommTimeouts(port, &commTimeouts);
+    }
+
+    if (Protocol == eProtocol643) {
+
+        BYTE message[] = { 0x01, 0x30, 0x30, 0x30, 0x31, 0x00 };
+        snprintf((char*)message + 1, 5, "%04d", Adr);
+
+        success = Send(message, sizeof(message) - 1);
         if (success)
         {
-            success = (com.ReadChar(success) == '\xFF');
-            com.Delay(20);
+            Sleep(100);
+            success = Receive() > 0;
         }
+
     }
 
     if (!success) CheckLastError();
 
     return success;
+}
+
+bool TenzoM::PortOpened()
+{
+    return (port != INVALID_HANDLE_VALUE);
+}
+
+DWORD TenzoM::Receive()
+{
+    bool  bSuccess = false;
+    DWORD dwResult = 0;
+    DWORD dwReadBytes = 0;
+    OVERLAPPED osReader = { 0 };
+
+    memset(readBuffer, 0, RECV_BUFFER_LENGHT);
+
+    osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (osReader.hEvent)
+    {
+        Sleep(100);
+        if (!ReadFile(port, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
+            if (GetLastError() == ERROR_IO_PENDING)
+            {
+                dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
+                switch (dwResult)
+                {
+                    // Read completed.
+                case WAIT_OBJECT_0:
+                    if (!GetOverlappedResult(port, &osReader, &dwReadBytes, FALSE))
+                    {
+                        // Error in communications; report it.
+                        bSuccess = false;
+                    }
+                    else
+                    {
+                        // Read completed successfully.
+                        bSuccess = true;
+                    }
+                    break;
+
+                case WAIT_TIMEOUT:
+                    // Operation isn't complete yet. fWaitingOnRead flag isn't
+                    // changed since I'll loop back around, and I don't want
+                    // to issue another read until the first one finishes.
+                    //
+                    // This is a good time to do some background work.
+                    break;
+
+                default:
+                    // Error in the WaitForSingleObject; abort.
+                    // This indicates a problem with the OVERLAPPED structure's
+                    // event handle.
+                    break;
+                }
+            }
+        }
+        else
+        {
+            // read completed immediately
+            bSuccess = true;
+        }
+    }
+
+    if (!bSuccess) CheckLastError();
+
+    return dwReadBytes;
+}
+
+bool TenzoM::Send(BYTE* message, DWORD msgSize)
+{
+    bool       bSuccess = false;
+    OVERLAPPED osWrite  = { 0 };
+    DWORD      dwBytesWritten = 0;
+
+    osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (osWrite.hEvent)
+    {
+        if (!WriteFile(port, message, msgSize, &dwBytesWritten, &osWrite))
+        {
+            if (GetLastError() == ERROR_IO_PENDING) {
+                // Write is pending.
+                if (GetOverlappedResult(port, &osWrite, &dwBytesWritten, TRUE))
+                    // Write operation completed successfully.
+                    bSuccess = true;
+            }
+        }
+        else
+        {
+            // WriteFile completed immediately.
+            bSuccess = true;
+        }
+        CloseHandle(osWrite.hEvent);
+    }
+
+    if (!bSuccess) CheckLastError();
+
+    return bSuccess;
 }
 
 /// <summary>
@@ -60,21 +197,17 @@ void TenzoM::ClosePort()
 {
     try
     {
-        com.Close();
+        if (port != INVALID_HANDLE_VALUE) {
+            PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+            CloseHandle(port);
+        }
     }
     catch (exception e)
     {
-
+        string sss(e.what());
+        int n = 0;
     }
-}
-
-/// <summary>
-/// Определяет, подключены ли мы к устройству через COM-порт
-/// </summary>
-/// <returns>Возвращает true, если к устройству подключены</returns>
-bool TenzoM::PortOpened()
-{
-    return com.IsOpened();
+    port = INVALID_HANDLE_VALUE;
 }
 
 /// <summary>
@@ -82,29 +215,25 @@ bool TenzoM::PortOpened()
 /// </summary>
 /// <param name="command">Байт-команда</param>
 /// <returns>Возвращает TRUE - если передача успешно завершилась</returns>
-bool TenzoM::SendCommand(char command)
+bool TenzoM::SendCommand(BYTE command)
 {
     bool success = false;
-    vector<char> message;
 
     switch (Protocol)
     {
     case TenzoM::eProtocolTenzoM:
-        message.push_back('\xFF');    // Начало кадра
-        message.push_back((char)Adr); // Байт адреса устройства
-        message.push_back(command);
-        message.push_back('\x00');    // Байт для контрольной суммы
-        message.push_back('\xFF');    // \ 
-        message.push_back('\xFF');    // / Конец кадра
-        // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-        SetCrcOfMessage(message, message.size());
-
-        success = com.Write(&message.at(0), message.size());
-
+    {
+        BYTE msg1[] = { 0xFF, Adr, command, 0x00, 0xFF, 0xFF };
+        SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        success = Send(msg1, sizeof(msg1));
         break;
+    }
     case TenzoM::eProtocol643:
-        success = com.WriteChar(command);
+    {
+        BYTE msg2[] = { command };
+        success = Send(msg2, 1);
         break;
+    }
     case TenzoM::eProtocolNet:
         break;
     case TenzoM::eProtocolWeb:
@@ -119,83 +248,18 @@ bool TenzoM::SendCommand(char command)
 }
 
 /// <summary>
-/// Получить ответ от весов в указанный буфер.
-/// </summary>
-/// <returns>Возвращает количество считанных байт в буфер</returns>
-long TenzoM::Receive(vector<char>& readBuffer)
-{
-    long readBytes    = 0;
-    bool successRead  = false;
-    char currentChar  = 0;
-    char previousChar = 0;
-
-    readBuffer.clear();
-
-    if (Protocol == eProtocolTenzoM)
-    {
-        bool packetBegan = false;
-        // Иногда в ответ идут всякие разные символы.
-        // Ждем начало пакета 0xFF, но чтобы следующий символ небыл равен 0xFE.
-        do
-        {
-            currentChar = com.ReadChar(successRead);
-            
-            if (successRead)
-            {
-                readBytes++;
-                if (readBytes > MAX_RECV_BYTES)
-                    break;
-            }
-            
-            if (!packetBegan && (previousChar == '\xFF') && (currentChar != '\xFF') && (currentChar != '\xFE'))
-            {
-                // Это начало пакета. Начинаем записывать в буффер.
-                packetBegan = true; // Включаем признак, что пакет начался.
-            }
-            if (packetBegan && (previousChar == '\xFF') && (currentChar == '\xFF'))
-            {
-                // Это конец пакета.
-                break;
-            }
-            if (packetBegan)
-            {
-                readBuffer.push_back(currentChar);
-            }
-
-            previousChar = currentChar;
-        } while (successRead);
-    }
-    else
-    {
-        do
-        {
-            currentChar = com.ReadChar(successRead);
-            if (successRead)
-            {
-                readBytes++;
-                if (readBytes > MAX_RECV_BYTES)
-                    break;
-                readBuffer.push_back(currentChar);
-            }
-        } while (successRead);
-    }
-
-    return readBuffer.size();
-}
-
-/// <summary>
 /// Устанавливает байт CRC для передаваемого сообщения
 /// </summary>
 /// <param name="buffer">Адрес сообщения</param>
 /// <param name="bufSize">Длина сообщения</param>
-void TenzoM::SetCrcOfMessage(vector<char>& buffer, long bufSize)
+void TenzoM::SetCrcOfMessage(BYTE* buffer, long bufSize)
 {
     if (bufSize < 6) return; // minimum message lenght
-    buffer.at(bufSize - 3) = 0; // set crc to 0
+    buffer[bufSize - 3] = 0; // set crc to 0
     char byte, crc = 0; constexpr char polinom = '\x69';
     for (int i = 1; i < bufSize - 2; i++)
     {
-        byte = buffer.at(i);
+        byte = buffer[i];
         if ((byte == '\xFF') || (byte == '\xFE')) continue;
         for (int j = 0; j < 8; j++)
         {
@@ -214,7 +278,7 @@ void TenzoM::SetCrcOfMessage(vector<char>& buffer, long bufSize)
         }
         byte = 0;
     }
-    buffer.at(bufSize - 3) = crc;
+    buffer[bufSize - 3] = crc;
 }
 
 /// <summary>
@@ -222,23 +286,23 @@ void TenzoM::SetCrcOfMessage(vector<char>& buffer, long bufSize)
 /// </summary>
 /// <returns>Возвращает полученный вес в граммах.
 /// Также устанавливает свойства стабильности веса и перегруза.</returns>
-int TenzoM::ExtractWeight(vector<char>& readBuffer)
+int TenzoM::ExtractWeight()
 {
     int       weight     = 0; // Вычисленный вес
-    const int offset     = 2; // Смещение от начала буфера, где идут байты веса
+    const int offset     = 3; // Смещение от начала буфера, где идут байты веса
     const int bytes      = 3; // Количество байт для считывания упакованного в BCD веса (у TenzoM - 3)
     int       multiplier = 1; // Множитель (вычисляется для разных разрядов)
 
     // Распаковка цифр веса из BCD формата (младшие байты первые)
     for (int i = 0; i < bytes; i++)
     {
-        auto byte = readBuffer.at(offset + i);
+        auto byte = readBuffer[offset + i];
         weight += ((byte >> 4) * 10 + (byte & '\x0F')) * multiplier;
         multiplier *= 100;
     }
 
     // За весом в полученном буфере идёт байт CON с дополнительными фалагами
-    const char con = readBuffer.at(offset + bytes);
+    const char con = readBuffer[offset + bytes];
 
     // Т.к. возврращаем в граммах, то считаем, сколько добавить нулей к результату
     int addNulls = 3 - (con & '\x07'); // Первые три бита - позиция запятой
@@ -252,38 +316,6 @@ int TenzoM::ExtractWeight(vector<char>& readBuffer)
     return weight * multiplier;
 }
 
-/// <summary>
-/// Получить состояние весоизмерительной системы
-/// </summary>
-/// <returns>Струткура, содержащая фалги состояния весов</returns>
-TenzoMSTATUS TenzoM::GetStatus()
-{
-    TenzoMSTATUS status = { 0 };
-
-    if (Protocol == eProtocolTenzoM)
-    {
-        if (SendCommand('\xBF'))
-        {
-            vector<char> readBuffer;
-            if (Receive(readBuffer))
-            {
-                const char statusByte = readBuffer.at(2);
-                status.Reset          = (statusByte & '\x80');
-                status.Error          = (statusByte & '\x40');
-                status.Netto          = (statusByte & '\x20');
-                status.KeyPressed     = (statusByte & '\x10');
-                status.EndDosing      = (statusByte & '\x08');
-                status.WeightFixed    = (statusByte & '\x04');
-                status.ADCCalibration = (statusByte & '\x02');
-                status.Dosing         = (statusByte & '\x01');
-            }
-
-        }
-
-    }
-
-    return status;
-}
 
 /// <summary>
 /// Обнулить показания веса
@@ -294,19 +326,16 @@ bool TenzoM::SetZero()
 
     if (Protocol == eProtocol643)
     {
-        success = com.WriteChar('\x0D');
-        if (success)
+        if (SendCommand('\x0D'))
         {
-            com.Delay(20);
-            success = (com.ReadChar(success) == '\xFF');
+            success = Receive() > 0;
         }
     }
     else if (Protocol == eProtocolTenzoM)
     {
         if (SendCommand('\xBF'))
         {
-            vector<char> readBuffer;
-            success = Receive(readBuffer) > 0;
+            success = Receive() > 0;
         }
     }
 
@@ -319,25 +348,52 @@ bool TenzoM::SetZero()
 /// <returns>Возвращает вес брутто</returns>
 int TenzoM::GetWeight()
 {
+    int brutto = 0;
+    DWORD dwBytesRead;
+
     if (Emulate) return RandomWeight();
 
     if (Protocol == eProtocol643)
     {
-        return GetWeight643();
-    }
+        if (SendCommand('\x10'))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                if (readBuffer[0] == '=')
+                {
+                    const char* p = (char*)&readBuffer + 1;
+                    char* p_end{};
 
-    int brutto = 0;
+                    brutto = strtol(p, &p_end, 0) * 1000;
+
+                    if (p == p_end)
+                    {
+                        brutto = 0;
+                    }
+                    else
+                    {
+                        BYTE lastByte = readBuffer[8];
+                        if (!(lastByte & 0x04))
+                        {
+                            brutto /= 10;
+                        }
+                        Calm = !(lastByte & 0x01);
+                    }
+                }
+            }
+        }
+    }
 
     if (Protocol == eProtocolTenzoM)
     {
         if (SendCommand('\xC3'))
         {
-            vector<char> readBuffer;
-            if (Receive(readBuffer))
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
             {
-                brutto = ExtractWeight(readBuffer);
+                brutto = ExtractWeight();
             }
-
         }
     }
 
@@ -350,24 +406,21 @@ int TenzoM::GetWeight()
 /// </summary>
 void TenzoM::SwitchToWeighing()
 {
-    bool success;
-
     switch (Protocol)
     {
     case TenzoM::eProtocolTenzoM:
     {
         if (SendCommand('\xCD'))
         {
-            vector<char> readBuffer;
-            Receive(readBuffer);
+            Receive();
         }
         break;
     }
     case TenzoM::eProtocol643:
     {
-        if (com.WriteChar('\x18'))
+        if (SendCommand('\x18'))
         {
-            com.ReadChar(success);
+            Receive();
         }
         break;
     }
@@ -384,29 +437,11 @@ void TenzoM::SwitchToWeighing()
 /// Получение списка доступных COM-портов
 /// </summary>
 /// <returns>Возвращается строка с именами доступных COM-портов, разделёнными точкой с запятой.</returns>
-string TenzoM::GetFreeComPorts()
+wstring TenzoM::GetFreeComPorts()
 {
-    string ports = { 0 };
-    ceSerial  _com;
-    #ifdef CE_WINDOWS
-        for (int i = 1; i < 255; i++)
-        {
-            string name = "COM" + i;
-            _com.SetPortName(name);
-            _com.Open();
-            if (_com.Open() == 0)
-            {
-                if (ports.size() > 0)
-                    ports += ";";
-                _com.Close();
-                ports += name;
-            }
-        }
-    #endif
-    #ifdef TM_LINUX
-    #endif
+    wstring ports = { 0 };
     
-    return string(ports);
+    return wstring(ports);
 }
 
 /// <summary>
@@ -455,47 +490,14 @@ int TenzoM::RandomWeight()
 }
 
 /// <summary>
-/// Получить вес по протокоглу 6.43
+/// Проверка последнего кода ошибки и получение её текстового представления
+/// в свойство Error.
 /// </summary>
-/// <returns>Возвращает вес на индикаторе</returns>
-int TenzoM::GetWeight643()
-{
-    int brutto = 0;
-    vector<char> readBuffer;
-
-    bool success = com.WriteChar('\x10');
-
-    if (success)
-    {
-        const auto bytesRead = Receive(readBuffer);
-
-        if (bytesRead > 8)
-        {
-            //=  2859. 
-            //=   286.$
-            string text(&readBuffer.at(1), 6);
-            brutto = stoi(text, 0, 10) * 1000;
-
-            const char lastByte = readBuffer.at(8);
-            if (!(lastByte & '\x04'))
-            {
-                brutto /= 10;
-            }
-            Calm = (lastByte & '\x20');
-            success = true;
-        }
-    }
-    
-    if (!success) CheckLastError();
-
-    return brutto;
-}
-
 void TenzoM::CheckLastError()
 {
     LastError = 0;
     Error.clear();
-    #ifdef CE_WINDOWS
+    #ifdef ISWINDOWS
         LastError = GetLastError();
         if (LastError != 0)
         {
@@ -503,14 +505,20 @@ void TenzoM::CheckLastError()
             const size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                 NULL, LastError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
 
-            string errorText(messageBuffer);
+            int len = MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, NULL, 0);
+            wstring errorText(len, 0);
+            MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, &errorText[0], len);
             Error.assign(errorText.begin(), errorText.end());
 
             LocalFree(messageBuffer);
         }
     #endif
-    #ifdef TM_LINUX
+    #ifdef ISLINUX
         LastError = errno;
         Error     = strerror(errno);
     #endif
+    if (LastError == ERROR_FILE_NOT_FOUND)
+    {
+        Error = L"COM-порт не существует";
+    }
 }

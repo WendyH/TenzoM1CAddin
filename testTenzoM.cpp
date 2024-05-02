@@ -1,5 +1,6 @@
 ﻿#define CE_SERIAL_IMPLEMENTATION
 
+#include <locale>
 #include <stdio.h>
 #include "TenzoM.h"
 
@@ -13,36 +14,42 @@ using namespace std;
 
 int main()
 {
-	printf("Проверка.");
-
 	#if defined( __linux__ )
 	setlocale(LC_ALL, "ru_RU.UTF-8");
 	#else
-	SetConsoleOutputCP(65001);
+	//SetConsoleOutputCP(65001);
+	if (setlocale(LC_ALL, "ru-RU.UTF-8") == NULL) {
+		printf("Error set locale ru-RU\n");
+		return -1;
+		// или принудительно ставим таблицу 1251 через SetConsoleCP.
+		// выше пример есть. И не забываем проверять результат SetConsoleCP
+		// Если ошибка возникла, то код ошибки смотрим через GetLastError.
+	}
 	#endif
 
+	wprintf(L"Проверка.\n");
+
 	TenzoM tenzom;
+	tenzom.IP = L"Проверка русского!";
 
 	auto comports = tenzom.GetFreeComPorts();
 
-	printf("comports: %s\n", comports.c_str());
+	wprintf(L"comports: %s  IP:%ls\n", comports.c_str(), tenzom.IP.c_str());
 
-	tenzom.Protocol = TenzoM::eProtocol643;
+	//tenzom.Protocol = TenzoM::eProtocol643;
 
-	tenzom.IP = "Проврка русского!";
-
-	bool success = tenzom.OpenPort("COM4", 9600, 1);
-
-	auto text = tenzom.Error;
+	bool success = tenzom.OpenPort(L"COM4", 9600, 1);
+	//bool success = tenzom.OpenPort(4, 9600, 1);
 
 	if (success)
 	{
-		auto ves = tenzom.GetWeight();
-		printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? "true" : "false");
+		int ves = tenzom.GetWeight();
+		//auto ves = tenzom.GetBrutto();
+		wprintf(L"ves: %d Calm: %s\n", ves, tenzom.Calm ? L"true" : L"false");
 	}
 	else
 	{
-		printf("Error code: %d Message: %s\n", (int)tenzom.LastError, tenzom.Error.c_str());
+		wprintf(L"Error code: %d Message: %s\n", (int)tenzom.LastError, tenzom.Error.c_str());
 	}
 
 	return 0;

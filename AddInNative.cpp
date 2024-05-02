@@ -133,13 +133,14 @@ CAddInNative::CAddInNative()
 	m_iMemory  = 0;
 	m_iConnect = 0;
 #ifdef _DEBUG
-	tenzom.IP = "Проверка строк!";
+	tenzom.IP = L"Проверка строк!";
 #endif
 
 }
 //---------------------------------------------------------------------------//
 CAddInNative::~CAddInNative()
 {
+	tenzom.ClosePort();
 }
 //---------------------------------------------------------------------------//
 bool CAddInNative::Init(void* pConnection)
@@ -509,7 +510,7 @@ bool CAddInNative::CallAsProc(const long lMethodNum,
 	{
 	case eMethConnect:
 	{
-		string name     = GetParamString(&paParams[0]);
+		wstring name    = GetParamString(&paParams[0]);
 		long  bound     = paParams[1].intVal;
 		int   deviceAdr = paParams[2].ui8Val;
 		tenzom.OpenPort(name, bound, deviceAdr);
@@ -542,9 +543,9 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 			return true;
 		case eMethConnect:
 		{
-			string name      = GetParamString(&paParams[0]);
-			long   bound     = paParams[1].intVal;
-			int    deviceAdr = paParams[2].ui8Val;
+			wstring name      = GetParamString(&paParams[0]);
+			long    bound     = paParams[1].intVal;
+			int     deviceAdr = paParams[2].ui8Val;
 			TV_VT  (pvarRetValue) = VTYPE_BOOL;
 			TV_BOOL(pvarRetValue) = tenzom.OpenPort(name, bound, deviceAdr);
 			return true;
@@ -660,9 +661,9 @@ uint32_t getLenShortWcharStr(const WCHAR_T* Source)
 }
 //---------------------------------------------------------------------------//
 
-string CAddInNative::GetParamString(tVariant * param)
+wstring CAddInNative::GetParamString(tVariant * param)
 {
-	string name;
+	wstring name;
 
 	if (param->vt == VTYPE_PWSTR)
 	{
@@ -672,17 +673,17 @@ string CAddInNative::GetParamString(tVariant * param)
 		#else
 			size_t len = ::convFromShortWchar(&prop, param->pwstrVal);
 			const size_t size_need = wcstombs(NULL, prop, len);
-			string text(size_need, 0);
-			wcstombs(&text.at(0), prop, len);
+			wstring text(prop);
+			//wcstombs(&text.at(0), prop, len);
 			name.assign(text.begin(), text.end());
 		#endif
 	}
 	else if (param->vt == VTYPE_PSTR)
 	{
-		name = string(param->pstrVal);
+		//name = string(param->pstrVal);
 	}
 
-	return string(name);
+	return wstring(name);
 }
 //---------------------------------------------------------------------------//
 void CAddInNative::SetPropString(tVariant* pvarRetValue, u16string text)
@@ -701,16 +702,17 @@ void CAddInNative::SetPropString(tVariant* pvarRetValue, u16string text)
 	}
 }
 //---------------------------------------------------------------------------//
-void CAddInNative::SetPropString(tVariant* pvarRetValue, string text)
+void CAddInNative::SetPropString(tVariant* pvarRetValue, wstring text)
 {
 	#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
 		u16string wcText = u16Convert.from_bytes(text);
 	#else
-		int count = MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), NULL, 0);
-		wstring wstr(count, 0);
-		MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), &wstr.at(0), count);
-		u16string wcText(wstr.begin(), wstr.end());
-	#endif
+		//int count = MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), NULL, 0);
+		//wstring wstr(count, 0);
+		//MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), &wstr.at(0), count);
+		//u16string wcText(wstr.begin(), wstr.end());
+		u16string wcText(text.begin(), text.end());
+#endif
 	SetPropString(pvarRetValue, wcText);
 }
 //---------------------------------------------------------------------------//

@@ -78,8 +78,8 @@ public:
     virtual void ADDIN_API SetLocale(const WCHAR_T* loc);
     
 private:
-    string GetParamString(tVariant* param);
-    void   SetPropString(tVariant* pvarPropVal, string text);
+    wstring GetParamString(tVariant* param);
+    void   SetPropString(tVariant* pvarPropVal, wstring text);
     void   SetPropString(tVariant* pvarPropVal, u16string text);
 
     // Attributes
