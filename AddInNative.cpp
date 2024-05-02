@@ -14,10 +14,11 @@
 #include <cuchar>
 #include "AddInNative.h"
 #include "TenzoM.h"
+
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"01.00");
+static const u16string sVersion(u"01.01");
 
 static const array<u16string, CAddInNative::ePropLast> osProps =
 {
@@ -75,22 +76,18 @@ uint32_t convFromShortWchar(wchar_t** Dest, const WCHAR_T* Source, uint32_t len 
 uint32_t getLenShortWcharStr(const WCHAR_T* Source);
 AppCapabilities g_capabilities = eAppCapabilitiesInvalid;
 
-template <typename T>
-string toUTF8(const basic_string<T, char_traits<T>, allocator<T>>& source)
+template< typename TCharType, typename TCharTraits, typename TStringAllocator >
+inline void Convert( const std::string& source_string, std::basic_string<TCharType, TCharTraits, TStringAllocator>& dest_string )
 {
-	string result;
-
-	wstring_convert<codecvt_utf8_utf16<T>, T> convertor;
-	result = convertor.to_bytes(source);
-
-	return result;
+	std::wstring_convert<std::codecvt_utf8_utf16<TCharType>, TCharType> converter;
+	dest_string = converter.from_bytes( source_string );
 }
 
-template <typename T>
-void fromUTF8(const string& source, basic_string<T, char_traits<T>, allocator<T>>& result)
+template< typename TCharType, typename TCharTraits, typename TStringAllocator >
+inline void Convert( const std::basic_string<TCharType, TCharTraits, TStringAllocator>& source_string, std::string& dest_string )
 {
-	wstring_convert<codecvt_utf8_utf16<T>, T> convertor;
-	result = convertor.from_bytes(source);
+	std::wstring_convert<std::codecvt_utf8_utf16<TCharType>, TCharType> converter;
+	dest_string = converter.to_bytes( source_string );
 }
 
 //---------------------------------------------------------------------------//
@@ -133,7 +130,7 @@ CAddInNative::CAddInNative()
 	m_iMemory  = 0;
 	m_iConnect = 0;
 #ifdef _DEBUG
-	tenzom.IP = L"Проверка строк!";
+	tenzom.IP  = L"Проверка строк!";
 #endif
 
 }
@@ -669,7 +666,11 @@ wstring CAddInNative::GetParamString(tVariant * param)
 	{
 		wchar_t* prop = 0;
 		#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
-			name = u16Convert.to_bytes(param->pwstrVal);  
+			size_t len = ::convFromShortWchar(&prop, param->pwstrVal);
+			const size_t size_need = wcstombs(NULL, prop, len);
+			wstring text(prop);
+			name.assign(text.begin(), text.end());
+			//name = u16Convert.to_bytes(param->pwstrVal);  
 		#else
 			size_t len = ::convFromShortWchar(&prop, param->pwstrVal);
 			const size_t size_need = wcstombs(NULL, prop, len);
@@ -705,7 +706,10 @@ void CAddInNative::SetPropString(tVariant* pvarRetValue, u16string text)
 void CAddInNative::SetPropString(tVariant* pvarRetValue, wstring text)
 {
 	#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
-		u16string wcText = u16Convert.from_bytes(text);
+		char16_t newtext[text.length()+1] = { 0 };
+		auto p = &newtext[0];
+		convToShortWchar(&p, text.c_str(), text.length());
+		u16string wcText(newtext);
 	#else
 		//int count = MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), NULL, 0);
 		//wstring wstr(count, 0);

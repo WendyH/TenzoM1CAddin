@@ -14,18 +14,7 @@ using namespace std;
 
 int main()
 {
-	#if defined( __linux__ )
-	setlocale(LC_ALL, "ru_RU.UTF-8");
-	#else
-	//SetConsoleOutputCP(65001);
-	if (setlocale(LC_ALL, "ru-RU.UTF-8") == NULL) {
-		printf("Error set locale ru-RU\n");
-		return -1;
-		// или принудительно ставим таблицу 1251 через SetConsoleCP.
-		// выше пример есть. И не забываем проверять результат SetConsoleCP
-		// Если ошибка возникла, то код ошибки смотрим через GetLastError.
-	}
-	#endif
+	setlocale(LC_ALL, "ru-RU.UTF-8");
 
 	wprintf(L"Проверка.\n");
 

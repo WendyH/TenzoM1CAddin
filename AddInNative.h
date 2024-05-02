@@ -86,7 +86,8 @@ private:
     IAddInDefBase      *m_iConnect;
     IMemoryManager     *m_iMemory;
 
-    wstring_convert<codecvt_utf8_utf16<char16_t, 0x10ffff, codecvt_mode::little_endian>, char16_t> u16Convert;
+    //wstring_convert<codecvt_utf8_utf16<char16_t, 0x10ffff, codecvt_mode::little_endian>, char16_t> u16Convert;
+    wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> u16Convert;
 
     TenzoM tenzom;
 };

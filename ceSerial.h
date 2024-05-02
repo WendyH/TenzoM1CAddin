@@ -87,7 +87,7 @@ public:
 	#include <linux/serial.h>
 #endif
 
-#ifdef CE_SERIAL_IMPLEMENTATION
+//#ifdef CE_SERIAL_IMPLEMENTATION
 
 void ceSerial::Delay(unsigned long ms) {
 #ifdef CE_WINDOWS

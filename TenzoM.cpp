@@ -1,14 +1,20 @@
-#include <iostream>
+﻿#include <iostream>
 #include <string>
 #include <locale>
 #include <codecvt>
 #include <random>
 #include "TenzoM.h"
 
-#if defined(_WIN64) || defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__WINDOWS__) || defined(__TOS_WIN__) || defined(__CYGWIN__)
-    #define TM_WINDOWS 
-#elif defined(unix) || defined(__unix) || defined(__unix__)
-    #define TM_LINUX
+#if ISWINDOWS
+
+#else
+    #define ERROR_FILE_NOT_FOUND 2L
+    #include <unistd.h>
+	#include <fcntl.h>
+	#include <termios.h>
+	#include <sys/ioctl.h>
+	#include <linux/serial.h>
+    #include <string.h>
 #endif
 
 using namespace std;
@@ -32,7 +38,8 @@ bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
 
     if (Emulate) return true;
 
-    SECURITY_ATTRIBUTES sa;
+#ifdef ISWINDOWS
+    SECURITY_ATTRIBUTES sa = { 0 };
     ZeroMemory(&sa, sizeof(sa));
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
@@ -86,6 +93,35 @@ bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
         }
 
     }
+#else // POSIX
+	struct serial_struct serinfo;
+	struct termios settings;
+	memset(&settings, 0, sizeof(settings));
+	settings.c_iflag = 0;
+	settings.c_oflag = 0;
+
+	settings.c_cflag = CREAD | CLOCAL | CS8; // see termios.h for more information
+
+	settings.c_lflag = 0;
+	settings.c_cc[VMIN ] = 1;
+	settings.c_cc[VTIME] = 0;
+
+    wstring wcomID = L"/dev/" + comName;
+    string comID(wcomID.begin(), wcomID.end());
+	fd = open(comID.c_str(), O_RDWR | O_NONBLOCK);
+	
+    if (fd == -1) {
+        success = false;
+        CheckLastError();
+        return false;
+	}
+
+    cfsetospeed(&settings, boud);
+    cfsetispeed(&settings, boud);
+	tcsetattr(fd, TCSANOW, &settings);
+	int flags = fcntl(fd, F_GETFL, 0);
+	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#endif
 
     if (!success) CheckLastError();
 
@@ -94,18 +130,25 @@ bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
 
 bool TenzoM::PortOpened()
 {
+#ifdef ISWINDOWS
     return (port != INVALID_HANDLE_VALUE);
+#else
+    return (fd != -1);
+#endif
 }
 
 DWORD TenzoM::Receive()
 {
-    bool  bSuccess = false;
-    DWORD dwResult = 0;
+    bool  bSuccess    = false;
+    DWORD dwResult    = 0;
     DWORD dwReadBytes = 0;
-    OVERLAPPED osReader = { 0 };
 
+    if (!PortOpened()) return 0;
+    
     memset(readBuffer, 0, RECV_BUFFER_LENGHT);
 
+#ifdef ISWINDOWS
+    OVERLAPPED osReader = { 0 };
     osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (osReader.hEvent)
     {
@@ -152,6 +195,10 @@ DWORD TenzoM::Receive()
             bSuccess = true;
         }
     }
+#else // POSIX
+    dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGHT);
+	bSuccess =  dwReadBytes > 0;
+#endif
 
     if (!bSuccess) CheckLastError();
 
@@ -160,10 +207,12 @@ DWORD TenzoM::Receive()
 
 bool TenzoM::Send(BYTE* message, DWORD msgSize)
 {
-    bool       bSuccess = false;
-    OVERLAPPED osWrite  = { 0 };
-    DWORD      dwBytesWritten = 0;
+    if (!PortOpened()) return 0;
+    bool  bSuccess = false;
+    DWORD dwBytesWritten = 0;
 
+#ifdef ISWINDOWS
+    OVERLAPPED osWrite  = { 0 };
     osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (osWrite.hEvent)
     {
@@ -183,6 +232,10 @@ bool TenzoM::Send(BYTE* message, DWORD msgSize)
         }
         CloseHandle(osWrite.hEvent);
     }
+#else // POSIX
+	dwBytesWritten = write(fd, message, msgSize);
+    bSuccess = (dwBytesWritten == msgSize);
+#endif
 
     if (!bSuccess) CheckLastError();
 
@@ -195,19 +248,24 @@ bool TenzoM::Send(BYTE* message, DWORD msgSize)
 /// </summary>
 void TenzoM::ClosePort()
 {
-    try
-    {
-        if (port != INVALID_HANDLE_VALUE) {
-            PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
-            CloseHandle(port);
+    #ifdef ISWINDOWS
+        try
+        {
+            if (port != INVALID_HANDLE_VALUE) {
+                PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+                CloseHandle(port);
+            }
         }
-    }
-    catch (exception e)
-    {
-        string sss(e.what());
-        int n = 0;
-    }
-    port = INVALID_HANDLE_VALUE;
+        catch (exception e)
+        {
+            string sss(e.what());
+            int n = 0;
+        }
+        port = INVALID_HANDLE_VALUE;
+    #else
+	    if (fd != -1) close(fd);
+	    fd = -1;
+    #endif
 }
 
 /// <summary>
@@ -515,7 +573,8 @@ void TenzoM::CheckLastError()
     #endif
     #ifdef ISLINUX
         LastError = errno;
-        Error     = strerror(errno);
+        string errortext = strerror(errno);
+        Error = wstring(errortext.begin(), errortext.end());
     #endif
     if (LastError == ERROR_FILE_NOT_FOUND)
     {

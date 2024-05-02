@@ -1,12 +1,14 @@
-#pragma once
+﻿#pragma once
 #if defined(_WIN64) || defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__WINDOWS__) || defined(__TOS_WIN__) || defined(__CYGWIN__)
-	#define ISWINDOWS 
+	#define ISWINDOWS  1
 #elif defined(unix) || defined(__unix) || defined(__unix__)
-	#define ISLINUX
+	#define ISLINUX 1
 #endif
 
 #if defined(ISWINDOWS)
 #include <windows.h>
+#else
+#include <com.h>
 #endif
 
 using namespace std;
@@ -28,7 +30,11 @@ struct TenzoMSTATUS {
 class TenzoM
 {
 private:
+#ifdef ISWINDOWS
 	HANDLE port = INVALID_HANDLE_VALUE;
+#else
+	long fd;
+#endif
 	BYTE   readBuffer[RECV_BUFFER_LENGHT] = { 0 };
 
 	bool  Send(BYTE* message, DWORD msgSize);
@@ -61,7 +67,7 @@ public:
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
 
-	wstring IP      = { 0 }; // IP-адрес для протоколов web или net
+	wstring IP      = L"Проверка!"; // IP-адрес для протоколов web или net
 	int     NetPort = 5001;  // Порт для протокола net
 	int     WebPort = 8080;  // Порт для протокола web
 
