@@ -20,21 +20,18 @@ int main()
 
 	TenzoM tenzom;
 	tenzom.IP = L"Проверка русского!";
+	tenzom.Protocol = TenzoM::eProtocol643;
 
 	auto comports = tenzom.GetFreeComPorts();
 
 	wprintf(L"comports: %s  IP:%ls\n", comports.c_str(), tenzom.IP.c_str());
 
-	//tenzom.Protocol = TenzoM::eProtocol643;
-
 	bool success = tenzom.OpenPort(L"COM4", 9600, 1);
-	//bool success = tenzom.OpenPort(4, 9600, 1);
 
 	if (success)
 	{
 		int ves = tenzom.GetWeight();
-		//auto ves = tenzom.GetBrutto();
-		wprintf(L"ves: %d Calm: %s\n", ves, tenzom.Calm ? L"true" : L"false");
+		wprintf(L"ves: %d Calm: %s\n", ves, tenzom.Calm ? L"1" : L"0");
 	}
 	else
 	{

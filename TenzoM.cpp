@@ -3,6 +3,7 @@
 #include <locale>
 #include <codecvt>
 #include <random>
+#include <regex>
 #include "TenzoM.h"
 
 #if ISWINDOWS
@@ -35,6 +36,9 @@ bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
 
     bool success = false;
     Adr = deviceAddress;
+
+    if (PortOpened())
+        ClosePort();
 
     if (Emulate) return true;
 
@@ -81,14 +85,14 @@ bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
     }
 
     if (Protocol == eProtocol643) {
-
+        // Приветствие весов
         BYTE message[] = { 0x01, 0x30, 0x30, 0x30, 0x31, 0x00 };
         snprintf((char*)message + 1, 5, "%04d", Adr);
 
         success = Send(message, sizeof(message) - 1);
         if (success)
         {
-            Sleep(100);
+            Sleep(40);
             success = Receive() > 0;
         }
 
@@ -128,6 +132,10 @@ bool TenzoM::OpenPort(wstring comName, long boud, int deviceAddress)
     return success;
 }
 
+/// <summary>
+/// Провека подключения к порту (весам)
+/// </summary>
+/// <returns>Возвращает true - если к COM-порту в данный момент установлено соединение.</returns>
 bool TenzoM::PortOpened()
 {
 #ifdef ISWINDOWS
@@ -137,74 +145,93 @@ bool TenzoM::PortOpened()
 #endif
 }
 
+/// <summary>
+/// Получение от устройства ответа.
+/// Полученные данные хранятся в буффере readBuffer.
+/// </summary>
+/// <returns>Возвращается количество считанных байт</returns>
 DWORD TenzoM::Receive()
 {
     bool  bSuccess    = false;
     DWORD dwResult    = 0;
     DWORD dwReadBytes = 0;
 
-    if (!PortOpened()) return 0;
-    
-    memset(readBuffer, 0, RECV_BUFFER_LENGHT);
+    try
+    {
+        if (!PortOpened()) return 0;
+
+        memset(readBuffer, 0, RECV_BUFFER_LENGHT);
 
 #ifdef ISWINDOWS
-    OVERLAPPED osReader = { 0 };
-    osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (osReader.hEvent)
-    {
-        Sleep(100);
-        if (!ReadFile(port, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
-            if (GetLastError() == ERROR_IO_PENDING)
-            {
-                dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
-                switch (dwResult)
+        OVERLAPPED osReader = { 0 };
+        osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (osReader.hEvent)
+        {
+            Sleep(50);
+            if (!ReadFile(port, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
+                if (GetLastError() == ERROR_IO_PENDING)
                 {
-                    // Read completed.
-                case WAIT_OBJECT_0:
-                    if (!GetOverlappedResult(port, &osReader, &dwReadBytes, FALSE))
+                    dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
+                    switch (dwResult)
                     {
-                        // Error in communications; report it.
-                        bSuccess = false;
-                    }
-                    else
-                    {
-                        // Read completed successfully.
-                        bSuccess = true;
-                    }
-                    break;
+                        // Read completed.
+                    case WAIT_OBJECT_0:
+                        if (!GetOverlappedResult(port, &osReader, &dwReadBytes, FALSE))
+                        {
+                            // Error in communications; report it.
+                            bSuccess = false;
+                        }
+                        else
+                        {
+                            // Read completed successfully.
+                            bSuccess = true;
+                        }
+                        break;
 
-                case WAIT_TIMEOUT:
-                    // Operation isn't complete yet. fWaitingOnRead flag isn't
-                    // changed since I'll loop back around, and I don't want
-                    // to issue another read until the first one finishes.
-                    //
-                    // This is a good time to do some background work.
-                    break;
+                    case WAIT_TIMEOUT:
+                        // Operation isn't complete yet. fWaitingOnRead flag isn't
+                        // changed since I'll loop back around, and I don't want
+                        // to issue another read until the first one finishes.
+                        //
+                        // This is a good time to do some background work.
+                        LastError = 1;
+                        Error = L"Нет ответа от переданных команд";
+                        return 0;
+                        break;
 
-                default:
-                    // Error in the WaitForSingleObject; abort.
-                    // This indicates a problem with the OVERLAPPED structure's
-                    // event handle.
-                    break;
+                    default:
+                        // Error in the WaitForSingleObject; abort.
+                        // This indicates a problem with the OVERLAPPED structure's
+                        // event handle.
+                        break;
+                    }
                 }
             }
+            else
+            {
+                // read completed immediately
+                bSuccess = true;
+            }
         }
-        else
-        {
-            // read completed immediately
-            bSuccess = true;
-        }
-    }
 #else // POSIX
-    dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGHT);
-	bSuccess =  dwReadBytes > 0;
+        dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGHT);
+        bSuccess = dwReadBytes > 0;
 #endif
+
+    }
+    catch (...) {}
 
     if (!bSuccess) CheckLastError();
 
     return dwReadBytes;
 }
 
+/// <summary>
+/// Передача в порт на устройство массива байт
+/// </summary>
+/// <param name="message">Ссылка на буфер сообщения</param>
+/// <param name="msgSize">Длина сообщения в байтах</param>
+/// <returns></returns>
 bool TenzoM::Send(BYTE* message, DWORD msgSize)
 {
     if (!PortOpened()) return 0;
@@ -248,24 +275,30 @@ bool TenzoM::Send(BYTE* message, DWORD msgSize)
 /// </summary>
 void TenzoM::ClosePort()
 {
-    #ifdef ISWINDOWS
-        try
+    try
+    {
+#ifdef ISWINDOWS
+        if (port != INVALID_HANDLE_VALUE)
         {
-            if (port != INVALID_HANDLE_VALUE) {
+            try
+            {
                 PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
-                CloseHandle(port);
-            }
+            } catch (...) {}
+            CloseHandle(port);
         }
-        catch (exception e)
-        {
-            string sss(e.what());
-            int n = 0;
-        }
-        port = INVALID_HANDLE_VALUE;
-    #else
-	    if (fd != -1) close(fd);
-	    fd = -1;
-    #endif
+#else
+        if (fd != -1)
+            close(fd);
+#endif
+    }
+    catch (...)
+    {
+    }
+#ifdef ISWINDOWS
+    port = INVALID_HANDLE_VALUE;
+#else
+    fd = -1;
+#endif
 }
 
 /// <summary>
@@ -508,40 +541,49 @@ wstring TenzoM::GetFreeComPorts()
 /// <returns>Случайный показатель веса</returns>
 int TenzoM::RandomWeight()
 {
+    int offset;
     if (!emulTargetWeight)
     {
         random_device dev;
         mt19937 rng(dev());
-        uniform_int_distribution<mt19937::result_type> dist48_145(48000, 145000);
+        uniform_int_distribution<mt19937::result_type> dist48_145(650, 1450);
 
-        emulTargetWeight = dist48_145(rng);
+        emulTargetWeight = dist48_145(rng) * 100;
 
-        emulMaxOffset = (emulTargetWeight - emulCurrentWeight) / emulTotalSteps;
-        if ((emulMaxOffset > -2) && (emulMaxOffset < 2))
+        emulMaxOffset = (emulTargetWeight - emulCurrentWeight);
+        for (int step = 0; step < emulTotalSteps; step++)
         {
-            if (emulMaxOffset < 0)
-                emulMaxOffset = -2;
-            else
-                emulMaxOffset = 2;
+            emulMaxOffset /= 2;
         }
-
     }
 
     if (emulCurrentWeight != emulTargetWeight)
     {
         Calm = false;
-        const int offset = (emulTargetWeight - emulCurrentWeight) / 2;
-        emulCurrentWeight += (offset / 2);
-        if (offset < emulMaxOffset) {
-            emulCurrentWeight = emulTargetWeight;
-            emulTargetWeight = 0;
-            Calm = true;
+        offset = (emulTargetWeight - emulCurrentWeight) / 2;
+        emulCurrentWeight += offset;
+        emulCurrentWeight = (emulCurrentWeight / 100) * 100; // Округление до 100 грамм
+
+        if (emulMaxOffset > 0)
+        {
+            if (offset <= emulMaxOffset)
+                emulCurrentWeight = emulTargetWeight;
+        }
+        else
+        {
+            if (offset >= emulMaxOffset)
+                emulCurrentWeight = emulTargetWeight;
         }
     }
-    else
+    if (emulCurrentWeight == emulTargetWeight)
     {
-        emulTargetWeight = 0;
         Calm = true;
+        emulCalmStep++;
+        if (emulCalmStep >= emulCalmSteps)
+        {
+            emulTargetWeight = 0;
+            emulCalmStep = 0;
+        }
     }
 
     return emulCurrentWeight;
@@ -553,31 +595,44 @@ int TenzoM::RandomWeight()
 /// </summary>
 void TenzoM::CheckLastError()
 {
-    LastError = 0;
     Error.clear();
-    #ifdef ISWINDOWS
-        LastError = GetLastError();
-        if (LastError != 0)
+#ifdef ISWINDOWS
+    LastError = GetLastError();
+#else
+    LastError = errno;
+#endif
+    try
+    {
+        switch (LastError)
         {
+        case  0: return; break;
+        case  2: Error = L"COM-порт не существует"; break;
+        case 32: Error = L"COM-порт занят"; break;
+        default:
+        {
+#ifdef ISWINDOWS
             LPSTR messageBuffer = nullptr;
             const size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                 NULL, LastError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
 
-            int len = MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, NULL, 0);
-            wstring errorText(len, 0);
-            MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, &errorText[0], len);
-            Error.assign(errorText.begin(), errorText.end());
+            const int len = MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, NULL, 0) - 1;
+            if (len > 0)
+            {
+
+                wstring errorText(len, 0);
+                MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, &errorText[0], len);
+                errorText = regex_replace(errorText, wregex(L"\r\n"), L"");
+                Error.assign(errorText.begin(), errorText.end());
+            }
 
             LocalFree(messageBuffer);
+#else
+            LastError = errno;
+            string errortext = strerror(errno);
+            Error = wstring(errortext.begin(), errortext.end());
+#endif
         }
-    #endif
-    #ifdef ISLINUX
-        LastError = errno;
-        string errortext = strerror(errno);
-        Error = wstring(errortext.begin(), errortext.end());
-    #endif
-    if (LastError == ERROR_FILE_NOT_FOUND)
-    {
-        Error = L"COM-порт не существует";
+        }
     }
+    catch (...) {}
 }

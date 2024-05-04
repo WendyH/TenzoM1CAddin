@@ -30,6 +30,13 @@ struct TenzoMSTATUS {
 class TenzoM
 {
 private:
+	int  emulMaxOffset     = 0;
+	int  emulTotalSteps    = 4;
+	int  emulTargetWeight  = 0;
+	int  emulCurrentWeight = 0;
+	int  emulCalmSteps     = 4;
+	int  emulCalmStep      = 0;
+
 #ifdef ISWINDOWS
 	HANDLE port = INVALID_HANDLE_VALUE;
 #else
@@ -53,11 +60,6 @@ public:
 		eProtocolNet,
 		eProtocolWeb
 	};
-
-	int  emulMaxOffset     = 0;
-	int  emulTotalSteps    = 4;
-	int  emulTargetWeight  = 0;
-	int  emulCurrentWeight = 0;
 
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
 	
