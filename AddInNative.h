@@ -1,9 +1,9 @@
 ﻿#ifndef __ADDINNATIVE_H__
 #define __ADDINNATIVE_H__
 
-#include "ComponentBase.h"
-#include "AddInDefBase.h"
-#include "IMemoryManager.h"
+#include "include/ComponentBase.h"
+#include "include/AddInDefBase.h"
+#include "include/IMemoryManager.h"
 
 #include <vector>
 #include <map>
@@ -78,15 +78,15 @@ public:
     virtual void ADDIN_API SetLocale(const WCHAR_T* loc);
     
 private:
-    wstring GetParamString(const tVariant* param);
-    void SetPropString(tVariant* pvarPropVal, wstring text);
+    u16string GetParamString(const tVariant* param);
     void SetPropString(tVariant* pvarPropVal, u16string text);
-    void addError(uint32_t wcode, const wchar_t* source, const wchar_t* descriptor, long code);
     void addError(uint32_t wcode, const char16_t* source, const char16_t* descriptor, long code);
     void addError(const char16_t* descriptor);
     template <size_t N>
     long FindName(array<u16string, N>, const WCHAR_T* name);
-    void CatchedException(exception_ptr eptr, wstring funcName);
+    void CatchedException(exception_ptr eptr, u16string funcName);
+
+    wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> u16Convert;
 
     // Attributes
     IAddInDefBase      *m_iConnect;

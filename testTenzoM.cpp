@@ -1,8 +1,9 @@
-﻿#define CE_SERIAL_IMPLEMENTATION
-
-#include <locale>
+﻿#include <locale>
 #include <stdio.h>
+#include <codecvt>
 #include "TenzoM.h"
+#include "AddInNative.h"
+#include "AddInNative.cpp"
 
 #if defined( __linux__ )
 #include "TenzoM.cpp"
@@ -15,27 +16,35 @@ using namespace std;
 int main()
 {
 	setlocale(LC_ALL, "ru-RU.UTF-8");
+	wstring_convert<codecvt_utf8<char16_t>, char16_t> UTF8Converter;
+	wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
 
-	wprintf(L"Проверка.\n");
+	printf("Проверка.\n");
+
+	CAddInNative addin;
+
+	auto index = addin.FindProp(u"СетевойАдрес");
+	printf("index: %d  \n", index);
 
 	TenzoM tenzom;
-	tenzom.IP = L"Проверка русского!";
+	tenzom.IP = u"Проверка русского!";
 	tenzom.Protocol = TenzoM::eProtocol643;
 
 	auto comports = tenzom.GetFreeComPorts();
 
-	wprintf(L"comports: %s  IP:%ls\n", comports.c_str(), tenzom.IP.c_str());
+	printf("comports: %s  IP:%s\n", UTF8Converter.to_bytes(comports).c_str(), UTF8Converter.to_bytes(tenzom.IP).c_str());
 
-	bool success = tenzom.OpenPort(L"COM4", 9600, 1);
+	bool success = tenzom.OpenPort(u"COM4", 9600, 1);
 
 	if (success)
 	{
 		int ves = tenzom.GetWeight();
-		wprintf(L"ves: %d Calm: %s\n", ves, tenzom.Calm ? L"1" : L"0");
+		printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? L"1" : L"0");
 	}
 	else
 	{
-		wprintf(L"Error code: %d Message: %s\n", (int)tenzom.LastError, tenzom.Error.c_str());
+		auto zzz = UTF8Converter.to_bytes(tenzom.Error);
+		printf("Error code: %d Message: %s\n", (int)tenzom.LastError, zzz.c_str());
 	}
 
 	return 0;

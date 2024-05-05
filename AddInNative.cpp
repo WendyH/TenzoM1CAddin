@@ -133,10 +133,10 @@ CAddInNative::CAddInNative()
 		m_iMemory  = 0;
 		m_iConnect = 0;
 #ifdef _DEBUG
-		tenzom.IP  = L"Проверка строк!";
+		tenzom.IP  = u"Проверка строк!";
 #endif
 	}
-	catch (...) { CatchedException(current_exception(), L"CAddInNative"); }
+	catch (...) { CatchedException(current_exception(), u"CAddInNative"); }
 }
 //---------------------------------------------------------------------------//
 CAddInNative::~CAddInNative()
@@ -145,7 +145,7 @@ CAddInNative::~CAddInNative()
 	{
 		tenzom.ClosePort();
 	}
-	catch (...) { CatchedException(current_exception(), L"~CAddInNative"); }
+	catch (...) { CatchedException(current_exception(), u"~CAddInNative"); }
 }
 //---------------------------------------------------------------------------//
 bool CAddInNative::Init(void* pConnection)
@@ -154,7 +154,7 @@ bool CAddInNative::Init(void* pConnection)
 	{
 		m_iConnect = (IAddInDefBase*)pConnection;
 	}
-	catch (...) { CatchedException(current_exception(), L"Init"); }
+	catch (...) { CatchedException(current_exception(), u"Init"); }
 	return m_iConnect != NULL;
 }
 //---------------------------------------------------------------------------//
@@ -170,7 +170,7 @@ void CAddInNative::Done()
 	try
 	{
 	}
-	catch (...) { CatchedException(current_exception(), L"Done"); }
+	catch (...) { CatchedException(current_exception(), u"Done"); }
 }
 /////////////////////////////////////////////////////////////////////////////
 // ILanguageExtenderBase
@@ -191,7 +191,7 @@ bool CAddInNative::RegisterExtensionAs(WCHAR_T** wsExtensionName)
 			
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"RegisterExtensionAs"); }
+	catch (...) { CatchedException(current_exception(), u"RegisterExtensionAs"); }
 
 	return true;
 }
@@ -207,13 +207,11 @@ long CAddInNative::FindProp(const WCHAR_T* wsPropName)
 	long index = -1;
 	try
 	{
-
 		index = FindName(osProps, wsPropName);
 		if (index < 0)
 			index = FindName(osProps_ru, wsPropName);
 	}
-	catch (...) { CatchedException(current_exception(), L"FindProp"); }
-
+	catch (...) { CatchedException(current_exception(), u"FindProp"); }
 	return index;
 }
 
@@ -256,7 +254,7 @@ const WCHAR_T* CAddInNative::GetPropName(long lPropNum, long lPropAlias)
 
 		memcpy(result, usCurrentName->c_str(), bytes);
 	}
-	catch (...) { CatchedException(current_exception(), L"GetPropName"); }
+	catch (...) { CatchedException(current_exception(), u"GetPropName"); }
 
 	return result;
 }
@@ -336,7 +334,7 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			return false;
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"GetPropVal"); }
+	catch (...) { CatchedException(current_exception(), u"GetPropVal"); }
 
 	return true;
 }
@@ -402,7 +400,7 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 		}
 
 	}
-	catch (...) { CatchedException(current_exception(), L"SetPropVal"); }
+	catch (...) { CatchedException(current_exception(), u"SetPropVal"); }
 	return false;
 }
 //---------------------------------------------------------------------------//
@@ -446,7 +444,7 @@ long CAddInNative::FindMethod(const WCHAR_T* wsMethodName)
 		if (index < 0)
 			index = FindName(osMethods_ru, wsMethodName);
 	}
-	catch (...) { CatchedException(current_exception(), L"FindMethod"); }
+	catch (...) { CatchedException(current_exception(), u"FindMethod"); }
 	return index;
 }
 //---------------------------------------------------------------------------//
@@ -489,7 +487,7 @@ const WCHAR_T* CAddInNative::GetMethodName(const long lMethodNum, const long lMe
 		memcpy(result, usCurrentName->c_str(), bytes);
 
 	}
-	catch (...) { CatchedException(current_exception(), L"GetMethodName"); }
+	catch (...) { CatchedException(current_exception(), u"GetMethodName"); }
 	return result;
 }
 //---------------------------------------------------------------------------//
@@ -512,7 +510,7 @@ bool CAddInNative::GetParamDefValue(const long lMethodNum, const long lParamNum,
 	{
 		TV_VT(pvarParamDefValue) = VTYPE_EMPTY;
 	}
-	catch (...) { CatchedException(current_exception(), L"GetParamDefValue"); }
+	catch (...) { CatchedException(current_exception(), u"GetParamDefValue"); }
 
 	return false;
 }
@@ -534,7 +532,7 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 			return false;
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"HasRetVal"); }
+	catch (...) { CatchedException(current_exception(), u"HasRetVal"); }
 
 	return false;
 }
@@ -547,9 +545,9 @@ bool CAddInNative::CallAsProc(const long lMethodNum, tVariant* paParams, const l
 		{
 		case eMethConnect:
 		{
-			const wstring name = GetParamString(&paParams[0]);
-			const long    bound = paParams[1].intVal;
-			const int     deviceAdr = paParams[2].ui8Val;
+			const u16string name      = GetParamString(&paParams[0]);
+			const long      bound     = paParams[1].intVal;
+			const int       deviceAdr = paParams[2].ui8Val;
 			tenzom.OpenPort(name, bound, deviceAdr);
 			return true;
 		}
@@ -568,7 +566,7 @@ bool CAddInNative::CallAsProc(const long lMethodNum, tVariant* paParams, const l
 			return false;
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"CallAsProc"); }
+	catch (...) { CatchedException(current_exception(), u"CallAsProc"); }
 
 	return true;
 }
@@ -584,9 +582,9 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 			return true;
 		case eMethConnect:
 		{
-			wstring name = GetParamString(&paParams[0]);
-			long    bound = paParams[1].intVal;
-			int     deviceAdr = paParams[2].ui8Val;
+			u16string name      = GetParamString(&paParams[0]);
+			long      bound     = paParams[1].intVal;
+			int       deviceAdr = paParams[2].ui8Val;
 			TV_VT(pvarRetValue) = VTYPE_BOOL;
 			TV_BOOL(pvarRetValue) = tenzom.OpenPort(name, bound, deviceAdr);
 			return true;
@@ -601,7 +599,7 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 			return false;
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"CallAsFunc"); }
+	catch (...) { CatchedException(current_exception(), u"CallAsFunc"); }
 	return true;
 }
 //---------------------------------------------------------------------------//
@@ -623,26 +621,31 @@ bool CAddInNative::setMemManager(void* mem)
 	{
 		m_iMemory = (IMemoryManager*)mem;
 	}
-	catch (...) { CatchedException(current_exception(), L"setMemManager"); }
+	catch (...) { CatchedException(current_exception(), u"setMemManager"); }
 	return m_iMemory != 0;
 }
 template <size_t N>
 //---------------------------------------------------------------------------//
 long CAddInNative::FindName(array<u16string, N> arr, const WCHAR_T* name)
 {
-	long index = -1;
+	long  index  = -1;
+	char* oldLoc = nullptr;
 	try
 	{
-		const size_t namesize = wcslen(name);
+		oldLoc = setlocale(LC_ALL, "");
+
+		u16string lname((char16_t *)name);
+		transform(lname.begin(), lname.end(), lname.begin(), towlower);
+		const size_t namesize = lname.size();
 		for (size_t i = 0; i < N; i++)
 		{
-			u16string word = arr.at(i);
+			u16string word(arr.at(i));
 			if (word.size() != namesize) continue;
+			transform(word.begin(), word.end(), word.begin(), towlower);
 			bool issame = true;
-
 			for (size_t n = 0; n < word.size(); n++)
 			{
-				if (::tolower(word[n]) != ::tolower(name[n]))
+				if (word[n] != lname[n])
 				{
 					issame = false;
 					break;
@@ -655,25 +658,10 @@ long CAddInNative::FindName(array<u16string, N> arr, const WCHAR_T* name)
 			}
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"FindName"); }
-
+	catch (...) { CatchedException(current_exception(), u"FindName"); }
+	if (oldLoc)
+		setlocale(LC_ALL, oldLoc);
 	return index;
-}
-//---------------------------------------------------------------------------//
-void CAddInNative::addError(uint32_t wcode, const wchar_t* source, const wchar_t* descriptor, long code)
-{
-	if (m_iConnect)
-	{
-		WCHAR_T* err = 0;
-		WCHAR_T* descr = 0;
-
-		::convToShortWchar(&err, source);
-		::convToShortWchar(&descr, descriptor);
-
-		m_iConnect->AddError(wcode, err, descr, code);
-		delete[] err;
-		delete[] descr;
-	}
 }
 //---------------------------------------------------------------------------//
 void CAddInNative::addError(uint32_t wcode, const char16_t* source, const char16_t* descriptor, long code)
@@ -769,34 +757,23 @@ uint32_t getLenShortWcharStr(const WCHAR_T* Source)
 }
 //---------------------------------------------------------------------------//
 
-wstring CAddInNative::GetParamString(const tVariant * param)
+u16string CAddInNative::GetParamString(const tVariant * param)
 {
-	wstring name;
+	u16string name;
 	try
 	{
 		if (param->vt == VTYPE_PWSTR)
 		{
 			wchar_t* prop = 0;
-#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
 			size_t len = ::convFromShortWchar(&prop, param->pwstrVal);
-			const size_t size_need = wcstombs(NULL, prop, len);
-			wstring text(prop);
-			name.assign(text.begin(), text.end());
-			//name = u16Convert.to_bytes(param->pwstrVal);  
-#else
-			size_t len = ::convFromShortWchar(&prop, param->pwstrVal);
-			const size_t size_need = wcstombs(NULL, prop, len);
-			wstring text(prop);
-			//wcstombs(&text.at(0), prop, len);
-			name.assign(text.begin(), text.end());
-#endif
+			name = u16string((char16_t*)prop);
 		}
 		else if (param->vt == VTYPE_PSTR)
 		{
-			//name = string(param->pstrVal);
+			//name = u16string(param->pstrVal);
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"GetParamString"); }
+	catch (...) { CatchedException(current_exception(), u"GetParamString"); }
 
 	return name;
 }
@@ -818,31 +795,10 @@ void CAddInNative::SetPropString(tVariant* pvarRetValue, u16string text)
 			pvarRetValue->wstrLen  = 0;
 		}
 	}
-	catch (...) { CatchedException(current_exception(), L"SetPropString"); }
+	catch (...) { CatchedException(current_exception(), u"SetPropString"); }
 }
 //---------------------------------------------------------------------------//
-void CAddInNative::SetPropString(tVariant* pvarRetValue, wstring text)
-{
-	try
-	{
-#if defined(__linux__) || defined(__APPLE__) || defined(__ANDROID__)
-		char16_t newtext[text.length() + 1] = { 0 };
-		auto p = &newtext[0];
-		convToShortWchar(&p, text.c_str(), text.length());
-		u16string wcText(newtext);
-#else
-		//int count = MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), NULL, 0);
-		//wstring wstr(count, 0);
-		//MultiByteToWideChar(CP_ACP, 0, text.c_str(), text.length(), &wstr.at(0), count);
-		//u16string wcText(wstr.begin(), wstr.end());
-		u16string wcText(text.begin(), text.end());
-#endif
-		SetPropString(pvarRetValue, wcText);
-	}
-	catch (...) { CatchedException(current_exception(), L"SetPropString"); }
-}
-//---------------------------------------------------------------------------//
-void CAddInNative::CatchedException(exception_ptr eptr, wstring funcName)
+void CAddInNative::CatchedException(exception_ptr eptr, u16string funcName)
 {
 	string msg;
 	try
@@ -862,8 +818,8 @@ void CAddInNative::CatchedException(exception_ptr eptr, wstring funcName)
 
 	if (!msg.empty())
 	{
-		const wstring sCaption = L"TenzoM1CAddin (" + funcName + L")";
-		const wstring sMessage(msg.begin(), msg.end());
+		const u16string sCaption = u"TenzoM1CAddin (" + funcName + u")";
+		const u16string sMessage(msg.begin(), msg.end());
 		addError(ADDIN_E_VERY_IMPORTANT, sCaption.c_str(), sMessage.c_str(), -1);
 	}
 }

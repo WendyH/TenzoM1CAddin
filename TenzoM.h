@@ -5,10 +5,10 @@
 	#define ISLINUX 1
 #endif
 
-#if defined(ISWINDOWS)
+#ifdef ISWINDOWS
 #include <windows.h>
 #else
-#include <com.h>
+//#include <com.h>
 #endif
 
 using namespace std;
@@ -42,15 +42,15 @@ private:
 #else
 	long fd;
 #endif
-	BYTE   readBuffer[RECV_BUFFER_LENGHT] = { 0 };
+	char readBuffer[RECV_BUFFER_LENGHT] = { 0 };
 
-	bool  Send(BYTE* message, DWORD msgSize);
-	bool  SendCommand(BYTE command);
-	DWORD Receive();
-	void  SetCrcOfMessage(BYTE* buffer, long bufSize);
-	int   ExtractWeight();
-	int   RandomWeight();
-	void  CheckLastError();
+	bool Send(char* message, long msgSize);
+	bool SendCommand(char command);
+	unsigned long Receive();
+	void SetCrcOfMessage(char* buffer, long bufSize);
+	int  ExtractWeight();
+	int  RandomWeight();
+	void CheckLastError();
 
 public:
 	enum ProtocolType
@@ -63,26 +63,26 @@ public:
 
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
 	
-	unsigned char Adr = 1; // Адрес устройства
-
+	char Adr      = 1;     // Адрес устройства
 	bool Calm     = false; // Вес стабилен
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
 
-	wstring IP      = L"Проверка!"; // IP-адрес для протоколов web или net
+	u16string IP    = u"Проверка!"; // IP-адрес для протоколов web или net
 	int     NetPort = 5001;  // Порт для протокола net
 	int     WebPort = 8080;  // Порт для протокола web
 
-	unsigned long LastError	 = 0;
-	wstring Error = { 0 };
+	unsigned long LastError = 0;
+	u16string     Error     = { 0 };
 
-	bool  OpenPort(wstring comName, long boud, int deviceAddress);
-	bool  PortOpened();
-	void  ClosePort();
+	void Delay(unsigned long ms);
+	bool OpenPort(u16string comName, long boud, int deviceAddress);
+	bool PortOpened();
+	void ClosePort();
 
 	TenzoMSTATUS GetStatus();
 	bool         SetZero();
 	int          GetWeight();
 	void         SwitchToWeighing();
-	wstring      GetFreeComPorts();
+	u16string    GetFreeComPorts();
 };

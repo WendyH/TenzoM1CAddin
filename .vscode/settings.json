@@ -1,0 +1,8 @@
+{
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}",
+        "./include",
+        "${default}"
+    ],
+    "C_Cpp.default.compilerPath": ""
+}
