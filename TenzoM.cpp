@@ -14,7 +14,6 @@
 	#include <fcntl.h>
 	#include <termios.h>
 	#include <sys/ioctl.h>
-	#include <linux/serial.h>
     #include <string.h>
 #endif
 
@@ -85,7 +84,6 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
         SetCommTimeouts(port, &commTimeouts);
     }
 #else // POSIX
-	struct serial_struct serinfo;
 	struct termios settings;
 	memset(&settings, 0, sizeof(settings));
 	settings.c_iflag = 0;
