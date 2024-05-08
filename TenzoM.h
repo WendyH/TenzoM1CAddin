@@ -51,6 +51,7 @@ private:
 	int  ExtractWeight();
 	int  RandomWeight();
 	void CheckLastError();
+	void Log(string txt, int i);
 
 public:
 	enum ProtocolType
@@ -67,6 +68,9 @@ public:
 	bool Calm     = false; // Вес стабилен
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
+
+	bool WriteLog = false; // Писать в лог все отправленные и полученные байты
+	u16string LogFile = u"/tenzo.log";
 
 	u16string IP    = u"Проверка!"; // IP-адрес для протоколов web или net
 	int     NetPort = 5001;  // Порт для протокола net

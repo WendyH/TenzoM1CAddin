@@ -4,6 +4,7 @@
 #include <codecvt>
 #include <random>
 #include <regex>
+#include <fstream>
 #include "TenzoM.h"
 
 #if ISWINDOWS
@@ -232,6 +233,10 @@ unsigned long TenzoM::Receive()
     catch (...) {}
 
     if (!bSuccess) CheckLastError();
+    else if (dwReadBytes > 0)
+    {
+        Log("Receive", dwReadBytes);
+    }
 
     return dwReadBytes;
 }
@@ -461,9 +466,19 @@ int TenzoM::GetWeight()
             dwBytesRead = Receive();
             if (dwBytesRead > 8)
             {
-                if (readBuffer[0] == '=')
+                // поиск последнего символа '=' в полученной последовательности
+                char* msg = nullptr;
+                int offset = 0;
+                while (dwBytesRead - offset > 8)
                 {
-                    const char* p = (char*)&readBuffer + 1;
+                    char* currPointer = readBuffer + offset;
+                    if (currPointer[0] == '=')
+                        msg = currPointer;
+                    offset++;
+                }
+                if (msg != nullptr)
+                {
+                    const char* p = msg + 1;
                     char* p_end{};
 
                     brutto = strtol(p, &p_end, 0) * 1000;
@@ -474,7 +489,7 @@ int TenzoM::GetWeight()
                     }
                     else
                     {
-                        char lastByte = readBuffer[8];
+                        char lastByte = msg[8];
                         if (!(lastByte & 0x04))
                         {
                             brutto /= 10;
@@ -482,6 +497,7 @@ int TenzoM::GetWeight()
                         Calm = !(lastByte & 0x01);
                     }
                 }
+                Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm) + "\n", 0);
             }
         }
     }
@@ -645,3 +661,31 @@ void TenzoM::CheckLastError()
     }
     catch (...) {}
 }
+void TenzoM::Log(string logMsg, int buflen)
+{
+//    if (!WriteLog) return;
+//#pragma warning(suppress : 4996)
+//    FILE* file = fopen("D:\\1C\\test.log", "ab");
+//
+//    string s(logMsg.begin(), logMsg.end());
+//    s += "\n";
+//#pragma warning(suppress : 4996)
+//    fwrite(s.c_str(), sizeof(char), s.size(), file);
+//
+//    if (buflen > 0)
+//    {
+//        char hexstr[201];
+//        memset(hexstr, 0, 201);
+//        int i;
+//        for (i = 0; i < buflen; i++) {
+//#pragma warning(suppress : 4996)
+//            sprintf(hexstr + i * 2, "%02x", readBuffer[i]);
+//        }
+//        hexstr[i * 2] = '\n';
+//#pragma warning(suppress : 4996)
+//        fwrite(hexstr, 1, i * 2 + 1, file);
+//    }
+//
+//    fclose(file);
+}
+
