@@ -69,12 +69,16 @@ public:
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
 
-	bool WriteLog = false; // Писать в лог все отправленные и полученные байты
-	u16string LogFile = u"/tenzo.log";
+	int  EmulMinKg = 9;    // Минимальный вес в килограммах при эмуляции веса
+	int  EmulMaxKg = 80;   // Минимальный вес в килограммах при эмуляции веса
 
-	u16string IP    = u"Проверка!"; // IP-адрес для протоколов web или net
-	int     NetPort = 5001;  // Порт для протокола net
-	int     WebPort = 8080;  // Порт для протокола web
+	bool WriteLog = false; // Писать в лог все отправленные и полученные байты
+	u16string LogFile = u"tenzom.log";
+
+	u16string IP    = u"127.0.0.1"; // IP-адрес для протоколов web или net
+	int     NetPort = 5001;         // Порт для протокола net
+	int     WebPort = 8080;         // Порт для протокола web
+	u16string Name  = u"Весы1";     // Имя весов для работы по web или net
 
 	unsigned long LastError = 0;
 	u16string     Error     = { 0 };

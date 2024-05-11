@@ -23,6 +23,7 @@ public:
         ePropIP,
         ePropNetPort,
         ePropWebPort,
+        ePropName,
         ePropConnected,
         ePropAdr,
         ePropCalm,
@@ -30,6 +31,10 @@ public:
         ePropError,
         ePropErrorCode,
         ePropEmulate,
+        ePropEmulMinKg,
+        ePropEmulMaxKg,
+        ePropWriteLog,
+        ePropLogFile,
         ePropLast      // Always last
     };
 

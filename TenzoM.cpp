@@ -497,7 +497,6 @@ int TenzoM::GetWeight()
                         Calm = !(lastByte & 0x01);
                     }
                 }
-                Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm) + "\n", 0);
             }
         }
     }
@@ -513,6 +512,7 @@ int TenzoM::GetWeight()
             }
         }
     }
+    Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm) + "\n", 0);
 
     return brutto;
 }
@@ -572,7 +572,7 @@ int TenzoM::RandomWeight()
     {
         random_device dev;
         mt19937 rng(dev());
-        uniform_int_distribution<mt19937::result_type> dist48_145(650, 1450);
+        uniform_int_distribution<mt19937::result_type> dist48_145(EmulMinKg*10, EmulMaxKg*10);
 
         emulTargetWeight = dist48_145(rng) * 100;
 
@@ -663,29 +663,38 @@ void TenzoM::CheckLastError()
 }
 void TenzoM::Log(string logMsg, int buflen)
 {
-//    if (!WriteLog) return;
-//#pragma warning(suppress : 4996)
-//    FILE* file = fopen("D:\\1C\\test.log", "ab");
-//
-//    string s(logMsg.begin(), logMsg.end());
-//    s += "\n";
-//#pragma warning(suppress : 4996)
-//    fwrite(s.c_str(), sizeof(char), s.size(), file);
-//
-//    if (buflen > 0)
-//    {
-//        char hexstr[201];
-//        memset(hexstr, 0, 201);
-//        int i;
-//        for (i = 0; i < buflen; i++) {
-//#pragma warning(suppress : 4996)
-//            sprintf(hexstr + i * 2, "%02x", readBuffer[i]);
-//        }
-//        hexstr[i * 2] = '\n';
-//#pragma warning(suppress : 4996)
-//        fwrite(hexstr, 1, i * 2 + 1, file);
-//    }
-//
-//    fclose(file);
+    if (!WriteLog) return;
+
+    try
+    {
+        string name(LogFile.begin(), LogFile.end());
+#pragma warning(suppress : 4996)
+        FILE* file = fopen(name.c_str(), "ab");
+
+        string s(logMsg.begin(), logMsg.end());
+        s += "\n";
+#pragma warning(suppress : 4996)
+        fwrite(s.c_str(), sizeof(char), s.size(), file);
+
+        if (buflen > 0)
+        {
+            char hexstr[201];
+            memset(hexstr, 0, 201);
+            int i;
+            for (i = 0; i < buflen; i++) {
+#pragma warning(suppress : 4996)
+                sprintf(hexstr + i * 2, "%02x", readBuffer[i]);
+            }
+            hexstr[i * 2] = '\n';
+#pragma warning(suppress : 4996)
+            fwrite(hexstr, 1, i * 2 + 1, file);
+        }
+
+        fclose(file);
+    }
+    catch (...)
+    {
+        WriteLog = false;
+    }
 }
 

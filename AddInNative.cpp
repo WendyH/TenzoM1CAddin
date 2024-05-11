@@ -19,7 +19,7 @@
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"01.01");
+static const u16string sVersion(u"01.02");
 
 static const array<u16string, CAddInNative::ePropLast> osProps =
 {
@@ -27,13 +27,18 @@ static const array<u16string, CAddInNative::ePropLast> osProps =
 	u"IP",
 	u"NetPort",
 	u"WebPort",
+	u"Name",
 	u"Connected",
 	u"Adr",
 	u"Calm",
 	u"Overload",
 	u"Error",
 	u"ErrorCode",
-	u"Emulate"
+	u"Emulate",
+	u"EmulMinKg",
+	u"EmulMaxKg",
+	u"WriteLog",
+	u"LogFile",
 };
 static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 {
@@ -41,13 +46,18 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 	u"СетевойАдрес",
 	u"СетевойПорт",
 	u"ВебПорт",
+	u"ИмяВесов",
 	u"Подключен",
 	u"АдресУстройства",
 	u"ВесСтабилен",
 	u"Перегрузка",
 	u"Ошибка",
 	u"КодОшибки",
-	u"РежимЭмуляции"
+	u"РежимЭмуляции",
+	u"ЭмуляцияКилограммМинимально",
+	u"ЭмуляцияКилограммМаксимально",
+	u"Логирование",
+	u"ЛогФайл",
 };
 static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
@@ -289,6 +299,11 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			TV_I4(pvarPropVal) = tenzom.WebPort;
 			return true;
 		}
+		case ePropName:
+		{
+			SetPropString(pvarPropVal, tenzom.Name);
+			return true;
+		}
 		case ePropConnected:
 		{
 			TV_VT(pvarPropVal) = VTYPE_BOOL;
@@ -330,6 +345,30 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			TV_BOOL(pvarPropVal) = tenzom.Emulate;
 			return true;
 		}
+		case ePropEmulMinKg:
+		{
+			TV_VT(pvarPropVal) = VTYPE_I4;
+			TV_I4(pvarPropVal) = tenzom.EmulMinKg;
+			return true;
+		}
+		case ePropEmulMaxKg:
+		{
+			TV_VT(pvarPropVal) = VTYPE_I4;
+			TV_I4(pvarPropVal) = tenzom.EmulMaxKg;
+			return true;
+		}
+		case ePropWriteLog:
+		{
+			TV_VT  (pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = tenzom.WriteLog;
+			return true;
+		}
+		case ePropLogFile:
+		{
+			SetPropString(pvarPropVal, tenzom.LogFile);
+			return true;
+		}
+
 		default:
 			return false;
 		}
@@ -371,6 +410,11 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			tenzom.WebPort = TV_I4(varPropVal);
 			return true;
 		}
+		case ePropName:
+		{
+			tenzom.Name = GetParamString(varPropVal);
+			return true;
+		}
 		case ePropConnected:
 		{
 			return true;
@@ -395,6 +439,27 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			tenzom.Emulate = TV_BOOL(varPropVal);
 			return true;
 		}
+		case ePropEmulMinKg:
+		{
+			tenzom.EmulMinKg = TV_I4(varPropVal);
+			return true;
+		}
+		case ePropEmulMaxKg:
+		{
+			tenzom.EmulMaxKg = TV_I4(varPropVal);
+			return true;
+		}
+		case ePropWriteLog:
+		{
+			tenzom.WriteLog = TV_BOOL(varPropVal);
+			return true;
+		}
+		case ePropLogFile:
+		{
+			tenzom.LogFile = GetParamString(varPropVal);
+			return true;
+		}
+
 		default:
 			return false;
 		}
@@ -417,10 +482,15 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	case ePropIP:
 	case ePropNetPort:
 	case ePropWebPort:
+	case ePropName:
 	case ePropAdr:
 	case ePropError:
 	case ePropErrorCode:
 	case ePropEmulate:
+	case ePropEmulMinKg:
+	case ePropEmulMaxKg:
+	case ePropWriteLog:
+	case ePropLogFile:
 		return true;
 	default:
 		return false;
