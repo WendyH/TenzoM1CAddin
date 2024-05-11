@@ -374,3 +374,5 @@ Release/
 testTenzoM/
 
 testTenzoM_linux
+*.o
+*.d

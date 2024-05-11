@@ -39,4 +39,4 @@ $(TARGET): $(OBJECTS) Makefile
 	g++ $(CXXLAGS) $(LIBPATHS) -shared $(OBJECTS) -o $(TARGET) $(addprefix -l, $(LIBS))
 
 clean:
-	rm -f $(CURDIR)/*.d $(CURDIR)/*.o 
+	rm -f $(CURDIR)/*.d $(CURDIR)/*.o
