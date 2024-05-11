@@ -16,8 +16,7 @@ using namespace std;
 int main()
 {
 	setlocale(LC_ALL, "ru-RU.UTF-8");
-	wstring_convert<codecvt_utf8<char16_t>, char16_t> UTF8Converter;
-	wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
+	wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> UTF8Convert;
 
 	printf("Проверка.\n");
 
@@ -32,19 +31,25 @@ int main()
 
 	auto comports = tenzom.GetFreeComPorts();
 
-	printf("comports: %s  IP:%s\n", UTF8Converter.to_bytes(comports).c_str(), UTF8Converter.to_bytes(tenzom.IP).c_str());
-
+#ifdef  __linux__
+	printf("comports: %s  IP:%s\n", UTF8Convert.to_bytes(comports).c_str(), UTF8Convert.to_bytes(tenzom.IP).c_str());
+#else
+	printf("comports: %ls  IP:%ls\n", comports.c_str(), tenzom.IP.c_str());
+#endif
 	bool success = tenzom.OpenPort(u"COM4", 9600, 1);
 
 	if (success)
 	{
 		int ves = tenzom.GetWeight();
-		printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? L"1" : L"0");
+		printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? "1" : "0");
 	}
 	else
 	{
-		auto zzz = UTF8Converter.to_bytes(tenzom.Error);
-		printf("Error code: %d Message: %s\n", (int)tenzom.LastError, zzz.c_str());
+#ifdef  __linux__
+		printf("Error code: %d Message: %s\n", (int)tenzom.LastError, UTF8Convert.to_bytes(tenzom.Error).c_str());
+#else
+		printf("Error code: %d Message: %ls\n", (int)tenzom.LastError, tenzom.Error.c_str());
+#endif
 	}
 
 	return 0;
