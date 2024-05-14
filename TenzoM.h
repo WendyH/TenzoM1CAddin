@@ -48,10 +48,12 @@ private:
 	bool SendCommand(char command);
 	unsigned long Receive();
 	void SetCrcOfMessage(char* buffer, long bufSize);
-	int  ExtractWeight();
+	char* FindTenzoMPacket(long bytesRead);
+	int  ExtractWeight(char* lpBuf);
 	int  RandomWeight();
 	void CheckLastError();
-	void Log(string txt, int i);
+	void Log(string txt, char* buf, int i);
+	void Log(string txt);
 
 public:
 	enum ProtocolType

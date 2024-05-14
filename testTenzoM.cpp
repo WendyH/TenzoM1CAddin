@@ -28,6 +28,9 @@ int main()
 	TenzoM tenzom;
 	tenzom.IP = u"Проверка русского!";
 	tenzom.Protocol = TenzoM::eProtocol643;
+	
+	tenzom.WriteLog = true;
+	tenzom.LogFile  = u"D:\\tenzom.log";
 
 	auto comports = tenzom.GetFreeComPorts();
 

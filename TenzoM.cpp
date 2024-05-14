@@ -5,6 +5,7 @@
 #include <random>
 #include <regex>
 #include <fstream>
+#include <ctime>
 #include "TenzoM.h"
 
 #if ISWINDOWS
@@ -235,7 +236,7 @@ unsigned long TenzoM::Receive()
     if (!bSuccess) CheckLastError();
     else if (dwReadBytes > 0)
     {
-        Log("Receive", dwReadBytes);
+        Log("Receive", readBuffer, dwReadBytes);
     }
 
     return dwReadBytes;
@@ -280,6 +281,10 @@ bool TenzoM::Send(char* message, long msgSize)
 #endif
 
     if (!bSuccess) CheckLastError();
+    else if (dwBytesWritten > 0)
+    {
+        Log("Send", message, dwBytesWritten);
+    }
 
     return bSuccess;
 }
@@ -392,7 +397,7 @@ void TenzoM::SetCrcOfMessage(char* buffer, long bufSize)
 /// </summary>
 /// <returns>Возвращает полученный вес в граммах.
 /// Также устанавливает свойства стабильности веса и перегруза.</returns>
-int TenzoM::ExtractWeight()
+int TenzoM::ExtractWeight(char* lpBuf)
 {
     int       weight     = 0; // Вычисленный вес
     const int offset     = 3; // Смещение от начала буфера, где идут байты веса
@@ -402,13 +407,13 @@ int TenzoM::ExtractWeight()
     // Распаковка цифр веса из BCD формата (младшие байты первые)
     for (int i = 0; i < bytes; i++)
     {
-        auto byte = readBuffer[offset + i];
+        auto byte = lpBuf[offset + i];
         weight += ((byte >> 4) * 10 + (byte & '\x0F')) * multiplier;
         multiplier *= 100;
     }
 
     // За весом в полученном буфере идёт байт CON с дополнительными фалагами
-    const char con = readBuffer[offset + bytes];
+    const char con = lpBuf[offset + bytes];
 
     // Т.к. возврращаем в граммах, то считаем, сколько добавить нулей к результату
     int addNulls = 3 - (con & '\x07'); // Первые три бита - позиция запятой
@@ -448,6 +453,18 @@ bool TenzoM::SetZero()
     return success;
 }
 
+vector<char> HexToBytes(const string& hex) {
+    vector<char> bytes;
+
+    for (unsigned int i = 0; i < hex.length(); i += 2) {
+        std::string byteString = hex.substr(i, 2);
+        char byte = (char)strtol(byteString.c_str(), NULL, 16);
+        bytes.push_back(byte);
+    }
+
+    return bytes;
+}
+
 /// <summary>
 /// Получить вес
 /// </summary>
@@ -464,12 +481,20 @@ int TenzoM::GetWeight()
         if (SendCommand('\x10'))
         {
             dwBytesRead = Receive();
+
+            //auto arr = HexToBytes("ff3d20202039302e3224ff3d20202039302e3224ff3d20202039302e3224ff3d20202039302e3425ff3d20202039302e36253d20202039302e3625");
+            //for (int i = 0; i < arr.size(); i++)
+            //{
+            //    readBuffer[i] = arr[i];
+            //    dwBytesRead = i;
+            //}
+
             if (dwBytesRead > 8)
             {
                 // поиск последнего символа '=' в полученной последовательности
                 char* msg = nullptr;
                 int offset = 0;
-                while (dwBytesRead - offset > 8)
+                while (dwBytesRead - offset >= 8)
                 {
                     char* currPointer = readBuffer + offset;
                     if (currPointer[0] == '=')
@@ -478,24 +503,27 @@ int TenzoM::GetWeight()
                 }
                 if (msg != nullptr)
                 {
-                    const char* p = msg + 1;
-                    char* p_end{};
-
-                    brutto = strtol(p, &p_end, 0) * 1000;
-
-                    if (p == p_end)
+                    // Заменяем знак разделителя точки на знак разделителя дробной части
+                    // как указано в нашей системе чтобы сработала функция stof
+                    char decimalPoint = localeconv()->decimal_point[0];
+                    for (int i = 0; i < (dwBytesRead - offset); i++)
                     {
-                        brutto = 0;
+                        if (msg[i] == '\x2E') msg[i] = decimalPoint;
                     }
-                    else
+
+                    try
                     {
-                        char lastByte = msg[8];
-                        if (!(lastByte & 0x04))
-                        {
-                            brutto /= 10;
-                        }
-                        Calm = !(lastByte & 0x01);
+                        auto val = stof(msg + 1);
+                        brutto = val * 1000;
                     }
+                    catch (...) { }
+
+                    char lastByte = msg[8];
+                    if (!(lastByte & 0x04))
+                    {
+                        brutto /= 10;
+                    }
+                    Calm = !(lastByte & 0x01);
                 }
             }
         }
@@ -508,15 +536,36 @@ int TenzoM::GetWeight()
             dwBytesRead = Receive();
             if (dwBytesRead > 8)
             {
-                brutto = ExtractWeight();
+                char* lpBuf = FindTenzoMPacket(dwBytesRead);
+                brutto = ExtractWeight(lpBuf);
             }
         }
     }
-    Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm) + "\n", 0);
+    Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm));
 
     return brutto;
 }
 
+/// <summary>
+/// Поиск в считнанных данных readBuffer начала пакета по протоколу TenzoM
+/// </summary>
+/// <param name="bytesRead">Количество считанных байт</param>
+/// <returns>Возвращает указатель на начало пакета</returns>
+char* TenzoM::FindTenzoMPacket(long bytesRead)
+{
+    char prevByte = '\x00';
+    char currByte;
+    int  offset = 0;
+    while (offset < bytesRead)
+    {
+        currByte = readBuffer[offset];
+        if ((currByte == '\xFF') && (prevByte != '\xFE'))
+            break;
+        offset++;
+    }
+    return readBuffer + offset;
+
+}
 
 /// <summary>
 /// Переключить в режим взвешивания
@@ -661,18 +710,38 @@ void TenzoM::CheckLastError()
     }
     catch (...) {}
 }
-void TenzoM::Log(string logMsg, int buflen)
+
+void TenzoM::Log(string logMsg)
+{
+    Log(logMsg, nullptr, 0);
+}
+
+void TenzoM::Log(string logMsg, char* buf, int buflen)
 {
     if (!WriteLog) return;
 
     try
     {
+        time_t rawtime = {};
+        time(&rawtime);
+        struct tm timeinfo = {};
+        localtime_s(&timeinfo, &rawtime);
+
+        char timeLabel[256];
+        strftime(timeLabel, sizeof(timeLabel), "%Y.%m.%d %H:%M:%S ", &timeinfo);
+
         string name(LogFile.begin(), LogFile.end());
 #pragma warning(suppress : 4996)
         FILE* file = fopen(name.c_str(), "ab");
 
+        fwrite(timeLabel, sizeof(char), strlen(timeLabel), file);
+
         string s(logMsg.begin(), logMsg.end());
-        s += "\n";
+        if (buflen == 0)
+            s += "\n";
+        else
+            s += " ";
+
 #pragma warning(suppress : 4996)
         fwrite(s.c_str(), sizeof(char), s.size(), file);
 
@@ -683,7 +752,7 @@ void TenzoM::Log(string logMsg, int buflen)
             int i;
             for (i = 0; i < buflen; i++) {
 #pragma warning(suppress : 4996)
-                sprintf(hexstr + i * 2, "%02x", readBuffer[i]);
+                sprintf(hexstr + i * 2, "%02x", buf[i]);
             }
             hexstr[i * 2] = '\n';
 #pragma warning(suppress : 4996)
