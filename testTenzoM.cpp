@@ -30,8 +30,11 @@ int main()
 	tenzom.Protocol = TenzoM::eProtocol643;
 	
 	tenzom.WriteLog = true;
+#ifdef ISWINDOWS
 	tenzom.LogFile  = u"D:\\tenzom.log";
-
+#else
+	tenzom.LogFile  = u"/tmp/tenzom.log";
+#endif
 	auto comports = tenzom.GetFreeComPorts();
 
 #ifdef  __linux__

@@ -4,5 +4,8 @@
         "./include",
         "${default}"
     ],
-    "C_Cpp.default.compilerPath": ""
+    "C_Cpp.default.compilerPath": "",
+    "files.associations": {
+        "chrono": "cpp"
+    }
 }

@@ -6,6 +6,9 @@
 #include <regex>
 #include <fstream>
 #include <ctime>
+#include <filesystem>
+#include <sstream>
+#include <iomanip>
 #include "TenzoM.h"
 
 #if ISWINDOWS
@@ -236,7 +239,7 @@ unsigned long TenzoM::Receive()
     if (!bSuccess) CheckLastError();
     else if (dwReadBytes > 0)
     {
-        Log("Receive", readBuffer, dwReadBytes);
+        Log(u"Receive", readBuffer, dwReadBytes);
     }
 
     return dwReadBytes;
@@ -283,7 +286,7 @@ bool TenzoM::Send(char* message, long msgSize)
     if (!bSuccess) CheckLastError();
     else if (dwBytesWritten > 0)
     {
-        Log("Send", message, dwBytesWritten);
+        Log(u"Send", message, dwBytesWritten);
     }
 
     return bSuccess;
@@ -541,7 +544,7 @@ int TenzoM::GetWeight()
             }
         }
     }
-    Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm));
+    Log((u16string)(u"Ves: " + (char16_t)brutto) + u" Calm: " + (char16_t)Calm);
 
     return brutto;
 }
@@ -605,9 +608,57 @@ void TenzoM::SwitchToWeighing()
 /// <returns>Возвращается строка с именами доступных COM-портов, разделёнными точкой с запятой.</returns>
 u16string TenzoM::GetFreeComPorts()
 {
-    u16string ports = { 0 };
-    // TODO: Реализовать GetFreeComPorts
-    return u16string(ports);
+    vector<string> port_names;
+#ifdef ISWINDOWS
+
+    TCHAR lpTargetPath[5000]; // buffer to store the path of the COMPORTS
+    for (int i = 0; i < 255; i++) // checking ports from COM0 to COM255
+    {
+        string name("COM" + i);
+        if (QueryDosDeviceA((LPCSTR)name.c_str(), (LPSTR)lpTargetPath, (DWORD)5000))
+        {
+            port_names.push_back(name);
+        }
+    }
+
+#else
+
+    filesystem::path p("/dev/serial/by-id");
+    try
+    {
+        if (!exists(p))
+        {
+            LastError = 2;
+            Error = p.generic_u16string() + u" does not exist";
+            Log(u"Error "+Error);
+        } 
+        else
+        {
+            for (auto de : filesystem::directory_iterator(p))
+            {
+                if (is_symlink(de.symlink_status()))
+                {
+                    filesystem::path symlink_points_at = read_symlink(de);
+                    filesystem::path canonical_path = filesystem::canonical(p / symlink_points_at);
+                    port_names.push_back(canonical_path.generic_string());
+                }
+            }
+        }
+    }
+    catch (...)
+    {
+        CheckLastError();        
+    }
+#endif
+    sort(port_names.begin(), port_names.end());
+    string s = "";
+    for (int i = 0; i < port_names.size(); i++)
+    {
+        if (i) s += ";";
+        s += port_names[i];
+    }
+
+    return u16string(s.begin(), s.end());
 }
 
 /// <summary>
@@ -681,6 +732,7 @@ void TenzoM::CheckLastError()
         switch (LastError)
         {
         case  0: return; break;
+
         case  2: Error = u"COM-порт не существует"; break;
         case 32: Error = u"COM-порт занят"; break;
         default:
@@ -707,16 +759,36 @@ void TenzoM::CheckLastError()
 #endif
         }
         }
+        if (LastError)
+        {
+            Log(u"Error: "+Error);
+        }
     }
     catch (...) {}
 }
 
-void TenzoM::Log(string logMsg)
+void TenzoM::Log(u16string logMsg)
 {
     Log(logMsg, nullptr, 0);
 }
 
-void TenzoM::Log(string logMsg, char* buf, int buflen)
+template<typename TInputIter>
+string make_hex_string(TInputIter first, TInputIter last, bool use_uppercase = true, bool insert_spaces = false)
+{
+    std::ostringstream ss;
+    ss << std::hex << std::setfill('0');
+    if (use_uppercase)
+        ss << std::uppercase;
+    while (first != last)
+    {
+        ss << std::setw(2) << static_cast<int>(*first++);
+        if (insert_spaces && first != last)
+            ss << " ";
+    }
+    return ss.str();
+}
+
+void TenzoM::Log(u16string logMsg, char* buf, int buflen)
 {
     if (!WriteLog) return;
 
@@ -725,14 +797,36 @@ void TenzoM::Log(string logMsg, char* buf, int buflen)
         time_t rawtime = {};
         time(&rawtime);
         struct tm timeinfo = {};
+#ifdef ISWINDOWS
         localtime_s(&timeinfo, &rawtime);
-
+#else
+        localtime_r(&rawtime, &timeinfo);
+#endif
         char timeLabel[256];
-        strftime(timeLabel, sizeof(timeLabel), "%Y.%m.%d %H:%M:%S ", &timeinfo);
+        size_t size = strftime(timeLabel, sizeof(timeLabel), "%Y.%m.%d %H:%M:%S ", &timeinfo);
 
-        string name(LogFile.begin(), LogFile.end());
+        string filename(LogFile.begin(), LogFile.end());
+
+        basic_ofstream<char16_t> outfile(filename, std::ios_base::app);
+        outfile << timeLabel;
+        outfile << logMsg;
+
+        if (buflen > 0)
+        {
+            outfile << " ";
+            vector<uint8_t> bytearr(buf, buf + buflen);
+            string hex = make_hex_string(bytearr.begin(), bytearr.end(), true);
+            u16string u16hex(hex.begin(), hex.end());
+            outfile << u16hex;
+        }
+        outfile << "\n";
+
+        outfile.close();
+
+/*
+
 #pragma warning(suppress : 4996)
-        FILE* file = fopen(name.c_str(), "ab");
+        FILE* file = fopen(filename.c_str(), "ab");
 
         fwrite(timeLabel, sizeof(char), strlen(timeLabel), file);
 
@@ -760,7 +854,8 @@ void TenzoM::Log(string logMsg, char* buf, int buflen)
         }
 
         fclose(file);
-    }
+    */
+        }
     catch (...)
     {
         WriteLog = false;

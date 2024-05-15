@@ -20,7 +20,7 @@ endif
 
 OBJECTS=$(SOURCES:.cpp=.o)
 INCLUDES=-Iinclude
-CXXLAGS=$(CXXFLAGS) $(INCLUDES) -m$(CPU) -finput-charset=UTF-8 -fPIC -std=c++14 -O1
+CXXLAGS=$(CXXFLAGS) $(INCLUDES) -m$(CPU) -finput-charset=UTF-8 -fPIC -std=c++20 -O1
 
 all: $(TARGET)
 

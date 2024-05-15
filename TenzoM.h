@@ -52,8 +52,8 @@ private:
 	int  ExtractWeight(char* lpBuf);
 	int  RandomWeight();
 	void CheckLastError();
-	void Log(string txt, char* buf, int i);
-	void Log(string txt);
+	void Log(u16string txt, char* buf, int i);
+	void Log(u16string txt);
 
 public:
 	enum ProtocolType
