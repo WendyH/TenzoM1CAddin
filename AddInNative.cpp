@@ -19,7 +19,7 @@
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"01.02");
+static const u16string sVersion(u"01.03");
 
 static const array<u16string, CAddInNative::ePropLast> osProps =
 {
@@ -39,6 +39,7 @@ static const array<u16string, CAddInNative::ePropLast> osProps =
 	u"EmulMaxKg",
 	u"WriteLog",
 	u"LogFile",
+	u"DecimalPoint"
 };
 static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 {
@@ -58,6 +59,7 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 	u"ЭмуляцияКилограммМаксимально",
 	u"Логирование",
 	u"ЛогФайл",
+	u"РазделительДробнойЧасти"
 };
 static const array<u16string, CAddInNative::eMethLast> osMethods =
 { 
@@ -368,6 +370,12 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			SetPropString(pvarPropVal, tenzom.LogFile);
 			return true;
 		}
+		case ePropDecimalPoint:
+		{
+			u16string s(1, tenzom.DecimalPoint);
+			SetPropString(pvarPropVal, s);
+			return true;
+		}
 
 		default:
 			return false;
@@ -459,6 +467,13 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			tenzom.LogFile = GetParamString(varPropVal);
 			return true;
 		}
+		case ePropDecimalPoint:
+		{
+			u16string param = GetParamString(varPropVal);
+			string s(param.begin(), param.end());
+			tenzom.DecimalPoint = s[0];
+			return true;
+		}
 
 		default:
 			return false;
@@ -491,6 +506,7 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	case ePropEmulMaxKg:
 	case ePropWriteLog:
 	case ePropLogFile:
+	case ePropDecimalPoint:
 		return true;
 	default:
 		return false;

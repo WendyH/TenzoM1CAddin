@@ -5,6 +5,8 @@
 	#define ISLINUX 1
 #endif
 
+#include <string>
+
 #ifdef ISWINDOWS
 #include <windows.h>
 #else
@@ -15,6 +17,7 @@ using namespace std;
 
 #define READ_TIMEOUT       2000     // milliseconds
 #define RECV_BUFFER_LENGHT 1024 * 4 // bytes
+#define TCP_TIMEOUT_SEC    2
 
 struct TenzoMSTATUS {
 	bool Reset;
@@ -38,12 +41,17 @@ private:
 	int  emulCalmStep      = 0;
 
 #ifdef ISWINDOWS
-	HANDLE port = INVALID_HANDLE_VALUE;
+	WSADATA wsaData;
+	HANDLE  comPort		 = INVALID_HANDLE_VALUE;
+	DWORD   tcpTimeout   = TCP_TIMEOUT_SEC * 1000;
+	bool    wsaStarted	 = false;
+	int     clientSocket = INVALID_SOCKET;
 #else
 	long fd;
+	DWORD timeout = TCP_TIMEOUT_SEC;
 #endif
 	char readBuffer[RECV_BUFFER_LENGHT] = { 0 };
-
+	bool TryConnectTo();
 	bool Send(char* message, long msgSize);
 	bool SendCommand(char command);
 	unsigned long Receive();
@@ -51,6 +59,8 @@ private:
 	char* FindTenzoMPacket(long bytesRead);
 	int  ExtractWeight(char* lpBuf);
 	int  RandomWeight();
+	void CheckTenzoNetCodeError(string sCode);
+	void SetErrorText(unsigned long errorCode);
 	void CheckLastError();
 	void Log(string txt, char* buf, int i);
 	void Log(string txt);
@@ -64,12 +74,29 @@ public:
 		eProtocolWeb
 	};
 
+	// Constructor
+	TenzoM() {     
+		try {
+			// detect decimal separator
+			DecimalPoint = stof("0,5") > 0.1 ? ',' : '.';
+		}
+		catch (...)
+		{
+		}
+	}
+	
+	// Destructor
+	~TenzoM() {
+		ClosePort();
+	}
+
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
 	
 	char Adr      = 1;     // Адрес устройства
 	bool Calm     = false; // Вес стабилен
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
+	char DecimalPoint = '.';
 
 	int  EmulMinKg = 9;    // Минимальный вес в килограммах при эмуляции веса
 	int  EmulMaxKg = 80;   // Минимальный вес в килограммах при эмуляции веса

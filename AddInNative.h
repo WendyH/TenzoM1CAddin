@@ -35,6 +35,7 @@ public:
         ePropEmulMaxKg,
         ePropWriteLog,
         ePropLogFile,
+        ePropDecimalPoint,
         ePropLast      // Always last
     };
 

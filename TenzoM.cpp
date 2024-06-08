@@ -1,27 +1,82 @@
-﻿#include <iostream>
-#include <string>
+﻿#ifdef __unix__
+#else
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#endif
+
+#include "TenzoM.h"
+
+#include <iostream>
 #include <locale>
 #include <codecvt>
 #include <random>
 #include <regex>
 #include <fstream>
 #include <ctime>
-#include "TenzoM.h"
 
-#if ISWINDOWS
+#ifdef ISWINDOWS
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Mswsock.lib")
+#pragma comment (lib, "AdvApi32.lib")
+#endif
 
+#ifdef ISWINDOWS
 #else
-    #define ERROR_FILE_NOT_FOUND 2L
-    #include <unistd.h>
-	#include <fcntl.h>
-	#include <termios.h>
-	#include <sys/ioctl.h>
-    #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <netdb.h>
+//#include <string.h>
 #endif
 
 using namespace std;
 
-#define MAX_RECV_BYTES 1024*4
+bool TenzoM::TryConnectTo()
+{
+    bool success = false;
+    int  err;
+
+#ifdef ISWINDOWS
+    err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (!err)
+    {
+        wsaStarted = true;
+        struct addrinfo* result = NULL, * ptr = NULL, hints = { 0 };
+
+        string port_as_string = to_string(Protocol == eProtocolWeb ? WebPort : NetPort);
+        string node(IP.begin(), IP.end());
+
+        hints.ai_family   = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+
+        err = getaddrinfo(node.c_str(), port_as_string.c_str(), &hints, &result);
+        if (!err) {
+            for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
+                clientSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+                if (clientSocket != INVALID_SOCKET)
+                {
+                    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, (char*)&tcpTimeout, sizeof(tcpTimeout));
+                    err = connect(clientSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+                    if (!err) {
+                        success = true;
+                        break;
+                    }
+                }
+            }
+            freeaddrinfo(result);
+        }
+    }
+#else
+
+#endif
+
+
+    return success;
+}
+
 
 /// <summary>
 /// Открыть COM порт для общения с устройствами тензотермическими датчиками
@@ -43,88 +98,95 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
 
     if (Emulate) return true;
 
+    if ((Protocol == eProtocolNet) || (Protocol == eProtocolWeb))
+    {
+        success = TryConnectTo();
+    }
+
+    if ((Protocol == eProtocolTenzoM) || (Protocol == eProtocol643))
+    {
 #ifdef ISWINDOWS
-    SECURITY_ATTRIBUTES sa = { 0 };
-    ZeroMemory(&sa, sizeof(sa));
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
+        SECURITY_ATTRIBUTES sa = { 0 };
+        sa.nLength = sizeof(sa);
+        sa.bInheritHandle = TRUE;
 
-    wstring comWM(comName.begin(), comName.end());
-    wstring comID = L"\\\\.\\" + comWM;
+        wstring comWN(comName.begin(), comName.end());
+        wstring comID = L"\\\\.\\" + comWN;
 
-    port = CreateFileW(comID.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
+        comPort = CreateFileW(comID.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
 
-    if (port == INVALID_HANDLE_VALUE) {
-        success = false;
-        CheckLastError();
-        return false;
-    }
-    success = true;
+        if (comPort == INVALID_HANDLE_VALUE) {
+            success = false;
+            CheckLastError();
+            return false;
+        }
+        success = true;
 
-    EscapeCommFunction(port, SETDTR);
+        EscapeCommFunction(comPort, SETDTR);
 
-    DCB dcb = { 0 };
-    dcb.DCBlength = sizeof(dcb);
-    GetCommState(port, &dcb);
-    dcb.BaudRate      = boud;
-    dcb.fBinary       = TRUE;
-    dcb.fAbortOnError = TRUE;
-    dcb.ByteSize      = 8;
-    dcb.Parity        = NOPARITY;
-    dcb.StopBits      = ONESTOPBIT;
-    SetCommState(port, &dcb);
+        DCB dcb = { 0 };
+        dcb.DCBlength = sizeof(dcb);
+        GetCommState(comPort, &dcb);
+        dcb.BaudRate      = boud;
+        dcb.fBinary       = TRUE;
+        dcb.fAbortOnError = TRUE;
+        dcb.ByteSize      = 8;
+        dcb.Parity        = NOPARITY;
+        dcb.StopBits      = ONESTOPBIT;
+        SetCommState(comPort, &dcb);
 
-    PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+        PurgeComm(comPort, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
 
-    COMMTIMEOUTS commTimeouts;
-    if (GetCommTimeouts(port, &commTimeouts)) {
-        commTimeouts.ReadIntervalTimeout         = MAXDWORD;
-        commTimeouts.ReadTotalTimeoutMultiplier  = 10;
-        commTimeouts.ReadTotalTimeoutConstant    = 50;
-        commTimeouts.WriteTotalTimeoutMultiplier = 10;
-        commTimeouts.WriteTotalTimeoutConstant   = 50;
-        SetCommTimeouts(port, &commTimeouts);
-    }
+        COMMTIMEOUTS commTimeouts;
+        if (GetCommTimeouts(comPort, &commTimeouts)) {
+            commTimeouts.ReadIntervalTimeout         = MAXDWORD;
+            commTimeouts.ReadTotalTimeoutMultiplier  = 10;
+            commTimeouts.ReadTotalTimeoutConstant    = 50;
+            commTimeouts.WriteTotalTimeoutMultiplier = 10;
+            commTimeouts.WriteTotalTimeoutConstant   = 50;
+            SetCommTimeouts(comPort, &commTimeouts);
+        }
 #else // POSIX
-	struct termios settings;
-	memset(&settings, 0, sizeof(settings));
-	settings.c_iflag = 0;
-	settings.c_oflag = 0;
+	    struct termios settings;
+	    memset(&settings, 0, sizeof(settings));
+	    settings.c_iflag = 0;
+	    settings.c_oflag = 0;
 
-	settings.c_cflag = CREAD | CLOCAL | CS8; // see termios.h for more information
+	    settings.c_cflag = CREAD | CLOCAL | CS8; // see termios.h for more information
 
-	settings.c_lflag = 0;
-	settings.c_cc[VMIN ] = 1;
-	settings.c_cc[VTIME] = 0;
+	    settings.c_lflag = 0;
+	    settings.c_cc[VMIN ] = 1;
+	    settings.c_cc[VTIME] = 0;
 
-    u16string wcomID = u"/dev/" + comName;
-    string comID(wcomID.begin(), wcomID.end());
-	fd = open(comID.c_str(), O_RDWR | O_NONBLOCK);
+        u16string wcomID = u"/dev/" + comName;
+        string comID(wcomID.begin(), wcomID.end());
+	    fd = open(comID.c_str(), O_RDWR | O_NONBLOCK);
 	
-    if (fd == -1) {
-        success = false;
-        CheckLastError();
-        return false;
-	}
+        if (fd == -1) {
+            success = false;
+            CheckLastError();
+            return false;
+	    }
 
-    cfsetospeed(&settings, boud);
-    cfsetispeed(&settings, boud);
-	tcsetattr(fd, TCSANOW, &settings);
-	int flags = fcntl(fd, F_GETFL, 0);
-	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        cfsetospeed(&settings, boud);
+        cfsetispeed(&settings, boud);
+	    tcsetattr(fd, TCSANOW, &settings);
+	    int flags = fcntl(fd, F_GETFL, 0);
+	    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-    if (Protocol == eProtocol643)
-    {
-        // Приветствие весов
-        char message[] = { '\x01', '\x30', '\x30', '\x30', '\x31', '\x00' };
-        snprintf((char*)message + 1, 5, "%04d", Adr);
-
-        success = Send(message, sizeof(message) - 1);
-        if (success)
+        if (Protocol == eProtocol643)
         {
-            Delay(40);
-            success = Receive() > 0;
+            // Приветствие весов
+            char message[] = { '\x01', '\x30', '\x30', '\x30', '\x31', '\x00' };
+            snprintf((char*)message + 1, 5, "%04d", Adr);
+
+            success = Send(message, sizeof(message) - 1);
+            if (success)
+            {
+                Delay(40);
+                success = Receive() > 0;
+            }
         }
     }
 
@@ -150,11 +212,22 @@ void TenzoM::Delay(unsigned long ms)
 /// <returns>Возвращает true - если к COM-порту в данный момент установлено соединение.</returns>
 bool TenzoM::PortOpened()
 {
+    if ((Protocol == eProtocolNet) || (Protocol == eProtocolWeb))
+    {
 #ifdef ISWINDOWS
-    return (port != INVALID_HANDLE_VALUE);
+        return (clientSocket != INVALID_SOCKET);
 #else
-    return (fd != -1);
+        return (clientSocket != INVALID_SOCKET);
 #endif
+    }
+    else
+    {
+#ifdef ISWINDOWS
+        return (comPort != INVALID_HANDLE_VALUE);
+#else
+        return (fd != -1);
+#endif
+    }
 }
 
 /// <summary>
@@ -180,7 +253,7 @@ unsigned long TenzoM::Receive()
         osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
         if (osReader.hEvent)
         {
-            if (!ReadFile(port, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
+            if (!ReadFile(comPort, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
                 if (GetLastError() == ERROR_IO_PENDING)
                 {
                     dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
@@ -188,7 +261,7 @@ unsigned long TenzoM::Receive()
                     {
                         // Read completed.
                     case WAIT_OBJECT_0:
-                        if (!GetOverlappedResult(port, &osReader, &dwReadBytes, FALSE))
+                        if (!GetOverlappedResult(comPort, &osReader, &dwReadBytes, FALSE))
                         {
                             // Error in communications; report it.
                             bSuccess = false;
@@ -259,11 +332,11 @@ bool TenzoM::Send(char* message, long msgSize)
     osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (osWrite.hEvent)
     {
-        if (!WriteFile(port, message, msgSize, &dwBytesWritten, &osWrite))
+        if (!WriteFile(comPort, message, msgSize, &dwBytesWritten, &osWrite))
         {
             if (GetLastError() == ERROR_IO_PENDING) {
                 // Write is pending.
-                if (GetOverlappedResult(port, &osWrite, &dwBytesWritten, TRUE))
+                if (GetOverlappedResult(comPort, &osWrite, &dwBytesWritten, TRUE))
                     // Write operation completed successfully.
                     bSuccess = true;
             }
@@ -297,14 +370,24 @@ void TenzoM::ClosePort()
 {
     try
     {
+        if (clientSocket != INVALID_SOCKET)
+        {
+            closesocket(clientSocket);
+            clientSocket = INVALID_SOCKET;
+        }
 #ifdef ISWINDOWS
-        if (port != INVALID_HANDLE_VALUE)
+        if (comPort != INVALID_HANDLE_VALUE)
         {
             try
             {
-                PurgeComm(port, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+                PurgeComm(comPort, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
             } catch (...) {}
-            CloseHandle(port);
+            CloseHandle(comPort);
+        }
+        if (wsaStarted)
+        {
+            WSACleanup();
+            wsaStarted = false;
         }
 #else
         if (fd != -1)
@@ -315,7 +398,7 @@ void TenzoM::ClosePort()
     {
     }
 #ifdef ISWINDOWS
-    port = INVALID_HANDLE_VALUE;
+    comPort = INVALID_HANDLE_VALUE;
 #else
     fd = -1;
 #endif
@@ -465,16 +548,109 @@ vector<char> HexToBytes(const string& hex) {
     return bytes;
 }
 
+vector<string> split(string s, string delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    string token;
+    vector<string> res;
+
+    while ((pos_end = s.find(delimiter, pos_start)) != string::npos) {
+        token = s.substr(pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back(token);
+    }
+
+    res.push_back(s.substr(pos_start));
+    return res;
+}
+
+/// <summary>
+/// Проверяет есть вернул ли Controller Net (или Controller 5) ошибку
+/// </summary>
+/// <param name="sCode">Строка с кодом ошибки</param>
+void TenzoM::CheckTenzoNetCodeError(string sCode)
+{
+    try
+    {
+        int code = stoi(sCode);
+        switch (code)
+        {
+        case -5000: LastError = code; Error = u"Терминал не обнаружен" ; break;
+        case -5001: LastError = code; Error = u"С терминалом нет связи"; break;
+        case -5002: Calm = true ; break;
+        case -5003: Calm = false; break;
+        case -5005: LastError = code; Error = u"Ошибочный вызов метода"; break;
+        default: LastError = code; break;
+        }
+    }
+    catch (...)
+    {
+
+    }
+}
+
 /// <summary>
 /// Получить вес
 /// </summary>
 /// <returns>Возвращает вес брутто</returns>
 int TenzoM::GetWeight()
 {
-    int  brutto = 0;
-    long dwBytesRead;
+    int  weight = 0;
+    long dwBytesRead  = 0;
+    bool errorOccured = false;
 
     if (Emulate) return RandomWeight();
+
+    if (!PortOpened()) return weight;
+
+    if ((Protocol == eProtocolNet) && (clientSocket != INVALID_SOCKET))
+    {
+        wstring name(Name.begin(), Name.end()); name += L"\r\n";
+        size_t  simbolsCount;
+        wcstombs_s(&simbolsCount, readBuffer, &name.at(0), sizeof(readBuffer));
+
+        Log("Send", readBuffer, simbolsCount);
+        int result = send(clientSocket, readBuffer, simbolsCount, 0);
+        if (result == simbolsCount)
+        {
+
+            int bytesrecv = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
+            if (bytesrecv > 0)
+            {
+                Log("Receive", readBuffer, bytesrecv);
+                string data(readBuffer);
+                auto lines = split(data, "\r\n");
+                auto count = lines.size();
+                if (count > 0)
+                {
+                    // В последней строке код ответа. Проверяем, ошибка ли или норм всё.
+                    CheckTenzoNetCodeError(lines.at(count - 1));
+                }
+                if (count > 1)
+                {
+                    // В предпоследней строке - значение веса
+                    string sWeight = lines.at(count - 2);
+                    string deciPnt(1, DecimalPoint);
+                    sWeight.replace(sWeight.find('.'), 1, deciPnt);
+                    weight = stof(sWeight) * 1000;
+                }
+            }
+            else if (bytesrecv == SOCKET_ERROR)
+            {
+                errorOccured = true;
+            }
+        }
+        else
+        {
+            errorOccured = true;
+        }
+
+        if (errorOccured)
+        {
+            LastError = WSAGetLastError();
+            SetErrorText(LastError);
+        }
+    }
+
 
     if (Protocol == eProtocol643)
     {
@@ -482,7 +658,7 @@ int TenzoM::GetWeight()
         {
             dwBytesRead = Receive();
 
-            //auto arr = HexToBytes("ff3d20202039302e3224ff3d20202039302e3224ff3d20202039302e3224ff3d20202039302e3425ff3d20202039302e36253d20202039302e3625");
+            //auto arr = HexToBytes("ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e38243d20203130382e3824");
             //for (int i = 0; i < arr.size(); i++)
             //{
             //    readBuffer[i] = arr[i];
@@ -505,23 +681,23 @@ int TenzoM::GetWeight()
                 {
                     // Заменяем знак разделителя точки на знак разделителя дробной части
                     // как указано в нашей системе чтобы сработала функция stof
-                    char decimalPoint = localeconv()->decimal_point[0];
+                    //char decimalPoint = localeconv()->decimal_point[0];
                     for (int i = 0; i < (dwBytesRead - offset); i++)
                     {
-                        if (msg[i] == '\x2E') msg[i] = decimalPoint;
+                        if (msg[i] == '\x2E') msg[i] = DecimalPoint;
                     }
 
                     try
                     {
                         auto val = stof(msg + 1);
-                        brutto = val * 1000;
+                        weight = val * 1000;
                     }
                     catch (...) { }
 
                     char lastByte = msg[8];
                     if (!(lastByte & 0x04))
                     {
-                        brutto /= 10;
+                        weight /= 10;
                     }
                     Calm = !(lastByte & 0x01);
                 }
@@ -537,13 +713,13 @@ int TenzoM::GetWeight()
             if (dwBytesRead > 8)
             {
                 char* lpBuf = FindTenzoMPacket(dwBytesRead);
-                brutto = ExtractWeight(lpBuf);
+                weight = ExtractWeight(lpBuf);
             }
         }
     }
-    Log("Ves: " + to_string(brutto) + " Calm: " + to_string(Calm));
+    Log("Ves: " + to_string(weight) + " Calm: " + to_string(Calm));
 
-    return brutto;
+    return weight;
 }
 
 /// <summary>
@@ -665,20 +841,14 @@ int TenzoM::RandomWeight()
 }
 
 /// <summary>
-/// Проверка последнего кода ошибки и получение её текстового представления
-/// в свойство Error.
+/// Получение текста описания ошибки по его коду и установка этого текста в свойстве Error
 /// </summary>
-void TenzoM::CheckLastError()
+/// <param name="errorCode">Код системной ошибки</param>
+void TenzoM::SetErrorText(unsigned long errorCode)
 {
-    Error.clear();
-#ifdef ISWINDOWS
-    LastError = GetLastError();
-#else
-    LastError = errno;
-#endif
     try
     {
-        switch (LastError)
+        switch (errorCode)
         {
         case  0: return; break;
         case  2: Error = u"COM-порт не существует"; break;
@@ -688,7 +858,7 @@ void TenzoM::CheckLastError()
 #ifdef ISWINDOWS
             LPSTR messageBuffer = nullptr;
             const size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL, LastError, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
+                NULL, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
 
             const int len = MultiByteToWideChar(CP_ACP, 0, messageBuffer, -1, NULL, 0) - 1;
             if (len > 0)
@@ -707,8 +877,32 @@ void TenzoM::CheckLastError()
 #endif
         }
         }
+        if (errorCode)
+        {
+            string errorText(Error.begin(), Error.end());
+            Log("Error (" + to_string(errorCode) + "): " + errorText);
+        }
     }
     catch (...) {}
+}
+
+/// <summary>
+/// Проверка последнего кода ошибки и получение её текстового представления
+/// в свойство Error.
+/// </summary>
+void TenzoM::CheckLastError()
+{
+    Error.clear();
+#ifdef ISWINDOWS
+    if ((Protocol == eProtocolNet) || (Protocol == eProtocolWeb))
+        LastError = WSAGetLastError();
+    else
+        LastError = GetLastError();
+#else
+    LastError = errno;
+#endif
+    if (LastError)
+        SetErrorText(LastError);
 }
 
 void TenzoM::Log(string logMsg)
