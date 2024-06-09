@@ -644,7 +644,7 @@ int TenzoM::GetWeight()
                     string sWeight = lines.at(count - 2);
                     string deciPnt(1, DecimalPoint);
                     sWeight.replace(sWeight.find('.'), 1, deciPnt);
-                    weight = stof(sWeight) * 1000;
+                    weight = (int)(stof(sWeight) * 1000);
                 }
             }
             else if (bytesrecv == -1)
@@ -707,7 +707,7 @@ int TenzoM::GetWeight()
                     try
                     {
                         auto val = stof(msg + 1);
-                        weight = val * 1000;
+                        weight = (int)(val * 1000);
                     }
                     catch (...) { }
 
@@ -842,7 +842,7 @@ u16string TenzoM::GetFreeComPorts()
 #endif
     sort(port_names.begin(), port_names.end());
     string s = "";
-    for (int i = 0; i < port_names.size(); i++)
+    for (size_t i = 0; i < port_names.size(); i++)
     {
         if (i) s += ";";
         s += port_names[i];
