@@ -26,10 +26,9 @@ int main(int argc, char** argv)
 		comPort.assign(coms.begin(), coms.end());
 	}
 
-
 	TenzoM tenzom;
 	tenzom.IP		= u"192.168.93.21";
-	tenzom.IP		= u"kompur-final01";
+	tenzom.IP		= u"localhost";
 	tenzom.Protocol = TenzoM::eProtocolNet;
 	
 	tenzom.WriteLog = true;

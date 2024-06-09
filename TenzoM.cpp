@@ -47,6 +47,7 @@ bool TenzoM::TryConnectTo()
     if (!err)
     {
         wsaStarted = true;
+#endif
         struct addrinfo* result = NULL, * ptr = NULL, hints = { 0 };
 
         string port_as_string = to_string(Protocol == eProtocolWeb ? WebPort : NetPort);
@@ -72,6 +73,7 @@ bool TenzoM::TryConnectTo()
             }
             freeaddrinfo(result);
         }
+#ifdef ISWINDOWS
     }
 #else
 
@@ -376,7 +378,11 @@ void TenzoM::ClosePort()
     {
         if (clientSocket != INVALID_SOCKET)
         {
+#ifdef ISWINDOWS
             closesocket(clientSocket);
+#else
+            close(clientSocket);
+#endif
             clientSocket = INVALID_SOCKET;
         }
 #ifdef ISWINDOWS
@@ -610,8 +616,11 @@ int TenzoM::GetWeight()
     {
         wstring name(Name.begin(), Name.end()); name += L"\r\n";
         size_t  simbolsCount;
+#ifdef ISWINDOWS
         wcstombs_s(&simbolsCount, readBuffer, &name.at(0), sizeof(readBuffer));
-
+#else
+        simbolsCount = wcstombs(readBuffer, &name.at(0), sizeof(readBuffer));
+#endif
         Log(u"Send", readBuffer, simbolsCount);
         int result = send(clientSocket, readBuffer, simbolsCount, 0);
         if (result == simbolsCount)
@@ -638,7 +647,7 @@ int TenzoM::GetWeight()
                     weight = stof(sWeight) * 1000;
                 }
             }
-            else if (bytesrecv == SOCKET_ERROR)
+            else if (bytesrecv == -1)
             {
                 errorOccured = true;
             }
@@ -650,8 +659,12 @@ int TenzoM::GetWeight()
 
         if (errorOccured)
         {
+#ifdef ISWINDOWS
             LastError = WSAGetLastError();
             SetErrorText(LastError);
+#else
+            CheckLastError();
+#endif
         }
     }
 
@@ -924,8 +937,7 @@ void TenzoM::SetErrorText(unsigned long errorCode)
 
             LocalFree(messageBuffer);
 #else
-            LastError = errno;
-            string errortext = strerror(errno);
+            string errortext = strerror(errorCode);
             Error.assign(errortext.begin(), errortext.end());
 #endif
         }

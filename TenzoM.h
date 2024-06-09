@@ -11,6 +11,7 @@
 #include <windows.h>
 #else
 //#include <com.h>
+	#define INVALID_SOCKET -1
 #endif
 
 using namespace std;
@@ -48,7 +49,8 @@ private:
 	int     clientSocket = INVALID_SOCKET;
 #else
 	long fd;
-	DWORD timeout = TCP_TIMEOUT_SEC;
+	int  tcpTimeout   = TCP_TIMEOUT_SEC;
+	int  clientSocket = INVALID_SOCKET;
 #endif
 	char readBuffer[RECV_BUFFER_LENGHT] = { 0 };
 	bool TryConnectTo();
