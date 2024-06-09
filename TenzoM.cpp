@@ -612,7 +612,7 @@ int TenzoM::GetWeight()
         size_t  simbolsCount;
         wcstombs_s(&simbolsCount, readBuffer, &name.at(0), sizeof(readBuffer));
 
-        Log("Send", readBuffer, simbolsCount);
+        Log(u"Send", readBuffer, simbolsCount);
         int result = send(clientSocket, readBuffer, simbolsCount, 0);
         if (result == simbolsCount)
         {
@@ -620,7 +620,7 @@ int TenzoM::GetWeight()
             int bytesrecv = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
             if (bytesrecv > 0)
             {
-                Log("Receive", readBuffer, bytesrecv);
+                Log(u"Receive", readBuffer, bytesrecv);
                 string data(readBuffer);
                 auto lines = split(data, "\r\n");
                 auto count = lines.size();
@@ -721,7 +721,7 @@ int TenzoM::GetWeight()
             }
         }
     }
-    Log((u16string)(u"Ves: " + (char16_t)brutto) + u" Calm: " + (char16_t)Calm);
+    Log((u16string)(u"Ves: " + (char16_t)weight) + u" Calm: " + (char16_t)Calm);
 
     return weight;
 }
