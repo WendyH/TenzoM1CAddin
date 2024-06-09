@@ -62,8 +62,8 @@ private:
 	void CheckTenzoNetCodeError(string sCode);
 	void SetErrorText(unsigned long errorCode);
 	void CheckLastError();
-	void Log(string txt, char* buf, int i);
-	void Log(string txt);
+	void Log(u16string txt, char* buf, int i);
+	void Log(u16string txt);
 
 public:
 	enum ProtocolType

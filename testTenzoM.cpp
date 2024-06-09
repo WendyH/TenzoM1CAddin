@@ -33,8 +33,11 @@ int main(int argc, char** argv)
 	tenzom.Protocol = TenzoM::eProtocolNet;
 	
 	tenzom.WriteLog = true;
+#ifdef ISWINDOWS
 	tenzom.LogFile  = u"D:\\tenzom.log";
-
+#else
+	tenzom.LogFile  = u"/tmp/tenzom.log";
+#endif
 	auto comports = tenzom.GetFreeComPorts();
 	//tenzom.Emulate = true;
 
