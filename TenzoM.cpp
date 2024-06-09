@@ -938,6 +938,25 @@ void TenzoM::SetErrorText(unsigned long errorCode)
     catch (...) {}
 }
 
+/// <summary>
+/// Проверка последнего кода ошибки и получение её текстового представления
+/// в свойство Error.
+/// </summary>
+void TenzoM::CheckLastError()
+{
+    Error.clear();
+#ifdef ISWINDOWS
+    if (Protocol == eProtocolNet)
+        LastError = WSAGetLastError();
+    else
+        LastError = GetLastError();
+#else
+    LastError = errno;
+#endif
+    if (LastError)
+        SetErrorText(LastError);
+}
+
 void TenzoM::Log(u16string logMsg)
 {
     Log(logMsg, nullptr, 0);
