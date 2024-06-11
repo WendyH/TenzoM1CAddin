@@ -61,9 +61,12 @@ bool TenzoM::TryConnectTo()
         if (!err) {
             for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
                 clientSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+
                 if (clientSocket != INVALID_SOCKET)
                 {
-                    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, (char*)&tcpTimeout, sizeof(tcpTimeout));
+                    int optval = 1;
+                    setsockopt(clientSocket, SOL_SOCKET, SO_KEEPALIVE, (char*)&optval, sizeof(optval));
+                    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char*)&tcpTimeout, sizeof(tcpTimeout));
                     err = connect(clientSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
                     if (!err) {
                         success = true;
@@ -78,7 +81,6 @@ bool TenzoM::TryConnectTo()
 #else
 
 #endif
-
 
     return success;
 }
@@ -558,19 +560,13 @@ vector<char> HexToBytes(const string& hex) {
     return bytes;
 }
 
-vector<string> split(string s, string delimiter) {
+void addLinesFromString(vector<string>& lines, string s, string delimiter) {
     size_t pos_start = 0, pos_end, delim_len = delimiter.length();
-    string token;
-    vector<string> res;
 
     while ((pos_end = s.find(delimiter, pos_start)) != string::npos) {
-        token = s.substr(pos_start, pos_end - pos_start);
+        lines.push_back(s.substr(pos_start, pos_end - pos_start));
         pos_start = pos_end + delim_len;
-        res.push_back(token);
     }
-
-    res.push_back(s.substr(pos_start));
-    return res;
 }
 
 /// <summary>
@@ -625,26 +621,53 @@ int TenzoM::GetWeight()
         int result = send(clientSocket, readBuffer, simbolsCount, 0);
         if (result == simbolsCount)
         {
-
+            vector<string> lines;
             int bytesrecv = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
             if (bytesrecv > 0)
             {
                 Log(u"Receive", readBuffer, bytesrecv);
-                string data(readBuffer);
-                auto lines = split(data, "\r\n");
-                auto count = lines.size();
-                if (count > 0)
+                string data(readBuffer, bytesrecv);
+                addLinesFromString(lines, data, "\r\n");
+            }
+            if (lines.size() < 2)
+            {
+                bytesrecv = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
+                if (bytesrecv > 0)
                 {
-                    // В последней строке код ответа. Проверяем, ошибка ли или норм всё.
-                    CheckTenzoNetCodeError(lines.at(count - 1));
+                    Log(u"Receive", readBuffer, bytesrecv);
+                    string data(readBuffer, bytesrecv);
+                    addLinesFromString(lines, data, "\r\n");
                 }
-                if (count > 1)
+            }
+
+            if (lines.size() > 1)
+            {
+                // Поиск в переданных строках кода состояния выполнения команды (начинается на знак "-")
+                for (auto &line : lines)
                 {
-                    // В предпоследней строке - значение веса
-                    string sWeight = lines.at(count - 2);
-                    string deciPnt(1, DecimalPoint);
-                    sWeight.replace(sWeight.find('.'), 1, deciPnt);
-                    weight = (int)(stof(sWeight) * 1000);
+                    if (line.size() == 0) continue;
+                    float value = 0;
+                    try
+                    {
+                        size_t ppos = line.find('.');
+                        if (ppos != string::npos)
+                        {
+                            string deciPnt(1, DecimalPoint);
+                            line.replace(ppos, 1, deciPnt);
+                        }
+                        value = stof(line);
+                    }
+                    catch (...)
+                    {
+                    }
+                    if (value < -4999)
+                    {
+                        CheckTenzoNetCodeError(line);
+                    }
+                    else
+                    {
+                        weight = (int)(value * 1000);
+                    }
                 }
             }
             else if (bytesrecv == -1)
@@ -665,6 +688,7 @@ int TenzoM::GetWeight()
 #else
             CheckLastError();
 #endif
+            ClosePort();
         }
     }
 
@@ -734,7 +758,7 @@ int TenzoM::GetWeight()
             }
         }
     }
-    Log((u16string)(u"Ves: " + (char16_t)weight) + u" Calm: " + (char16_t)Calm);
+    Log((u16string)(u"Ves: " + (char16_t)weight) + u" Calm: " + (Calm ? u"1": u"0"));
 
     return weight;
 }

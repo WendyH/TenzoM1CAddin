@@ -28,7 +28,7 @@ int main(int argc, char** argv)
 
 	TenzoM tenzom;
 	tenzom.IP		= u"192.168.93.21";
-	tenzom.IP		= u"localhost";
+	tenzom.Name		= u"Весы2";
 	tenzom.Protocol = TenzoM::eProtocolNet;
 	
 	tenzom.WriteLog = true;
