@@ -30,7 +30,7 @@ int main(int argc, char** argv)
 	tenzom.IP		= u"192.168.93.220";
 	tenzom.NetPort  = 4001;
 	tenzom.NetMode  = true;
-	//tenzom.Name		= u"Весы2";
+	tenzom.Name		= u"Весы2";
 	tenzom.Protocol = TenzoM::eProtocolTenzoM;
 	
 	tenzom.WriteLog = true;
@@ -71,7 +71,7 @@ int main(int argc, char** argv)
 				auto code = tenzom.GetEnteredCode();
 				printf("Code: %s\n", code.c_str());
 			}
-			Sleep(100);
+			//Sleep(100);
 		}
 		//ves = tenzom.GetWeight();
 		//printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? "1" : "0");

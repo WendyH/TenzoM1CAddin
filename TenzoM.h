@@ -34,6 +34,11 @@ struct TenzoMSTATUS {
 class TenzoM
 {
 private:
+#ifdef ISWINDOWS
+#else
+	locale_t locale;
+#endif
+
 	int  emulMaxOffset     = 0;
 	int  emulTotalSteps    = 4;
 	int  emulTargetWeight  = 0;
@@ -79,6 +84,10 @@ public:
 	// Constructor
 	TenzoM() {     
 		DecimalPoint = stof("0,5") > 0.1 ? ',' : '.'; // detect decimal separator
+#ifdef ISWINDOWS
+#else
+		locale = newlocale(LC_ALL_MASK, "", (locale_t)0);
+#endif
 	}
 	
 	// Destructor

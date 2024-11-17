@@ -33,7 +33,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netdb.h>
-//#include <string.h>
+#include <string.h>
 #endif
 
 using namespace std;
@@ -67,11 +67,7 @@ bool TenzoM::TryConnectTo()
 
                 if (clientSocket != INVALID_SOCKET)
                 {
-                    saddr    = ptr->ai_addr;
-                    saddrlen = ptr->ai_addrlen;
-
                     int optval = 1;
-                    //setsockopt(clientSocket, SOL_SOCKET, SO_KEEPALIVE, (char*)&optval, sizeof(optval));
                     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char*)&tcpTimeout, sizeof(tcpTimeout));
                     err = connect(clientSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
                     if (!err) {
@@ -699,6 +695,7 @@ u16string GetText(char* data, long datsSize)
         realSize++;
     }
 
+#ifdef ISWINDOWS
     int wchlen = MultiByteToWideChar(CP_ACP, 0, data, realSize, NULL, 0);
     if (wchlen > 0 && wchlen != 0xFFFD)
     {
@@ -706,6 +703,11 @@ u16string GetText(char* data, long datsSize)
         MultiByteToWideChar(CP_ACP, 0, data, realSize, &wstr[0], wchlen);
         text = u16string(wstr.begin(), wstr.end());
     }
+#else
+    string s = string(&data[0], realSize);
+    wstring_convert<codecvt_utf8_utf16<char16_t>,char16_t> convert;
+    text = convert.from_bytes(s);
+#endif
     return text;
 }
 
@@ -717,22 +719,28 @@ string UTF16_to_CP1251(u16string const& utf16)
 {
     if (!utf16.empty())
     {
-        std::wstring str = wstring(utf16.begin(), utf16.end());
-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
-        std::string utf8 = convert.to_bytes(str);
+        wstring_convert<codecvt_utf8_utf16<char16_t>,char16_t> convert;
+        string utf8 = convert.to_bytes(utf16);
+        //wstring str = wstring(utf16.begin(), utf16.end());
+        //wstring_convert<codecvt_utf8_utf16<wchar_t>> convert;
+        //string utf8 = convert.to_bytes(str);
 
+#ifdef ISWINDOWS
         int wchlen = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), utf8.size(), NULL, 0);
         if (wchlen > 0 && wchlen != 0xFFFD)
         {
-            std::vector<wchar_t> wbuf(wchlen);
+            vector<wchar_t> wbuf(wchlen);
             MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), utf8.size(), &wbuf[0], wchlen);
-            std::vector<char> buf(wchlen);
+            vector<char> buf(wchlen);
             WideCharToMultiByte(1251, 0, &wbuf[0], wchlen, &buf[0], wchlen, 0, 0);
-
-            return std::string(&buf[0], wchlen);
+            return string(&buf[0], wchlen);
         }
+#else
+
+            return string(utf8.begin(), utf8.end());
+#endif
     }
-    return std::string();
+    return string();
 }
 
 /// <summary>
@@ -800,9 +808,8 @@ void TenzoM::SetErrorText(unsigned long errorCode)
         switch (errorCode)
         {
         case  0: return; break;
-
-        case  2: Error = u"COM-порт не существует"; break;
-        case 32: Error = u"COM-порт занят"; break;
+//        case  2: Error = u"COM-порт не существует"; break;
+//        case 32: Error = u"COM-порт занят"; break;
         default:
         {
 #ifdef ISWINDOWS
@@ -821,8 +828,17 @@ void TenzoM::SetErrorText(unsigned long errorCode)
 
             LocalFree(messageBuffer);
 #else
-            string errortext = strerror(errorCode);
-            Error.assign(errortext.begin(), errortext.end());
+        string errortext = "";
+    	if (locale == (locale_t)0)
+        {
+            errortext = strerror(errorCode);
+        }
+        else
+        {
+            errortext = strerror_l(errorCode, locale);
+        }
+        wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> conv;
+        Error = conv.from_bytes(&errortext[0]);
 #endif
         }
         }
