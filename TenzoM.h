@@ -47,6 +47,8 @@ private:
 	DWORD   tcpTimeout   = TCP_TIMEOUT_SEC * 1000;
 	bool    wsaStarted	 = false;
 	int     clientSocket = INVALID_SOCKET;
+	sockaddr* saddr;
+	int saddrlen;
 #else
 	long fd;
 	int  tcpTimeout   = TCP_TIMEOUT_SEC;
@@ -58,10 +60,10 @@ private:
 	bool SendCommand(char command);
 	unsigned long Receive();
 	void SetCrcOfMessage(char* buffer, long bufSize);
-	char* FindTenzoMPacket(long bytesRead);
-	int  ExtractWeight(char* lpBuf);
+	bool FindTenzoMPacket(long bytesRead, char command);
+	bool FindTenzoMPacket(long bytesRead, char command, char*& data, long& dataSize);
+	int  ExtractWeight(char* data, long dataSize);
 	int  RandomWeight();
-	void CheckTenzoNetCodeError(string sCode);
 	void SetErrorText(unsigned long errorCode);
 	void CheckLastError();
 	void Log(u16string txt, char* buf, int i);
@@ -71,20 +73,12 @@ public:
 	enum ProtocolType
 	{
 		eProtocolTenzoM = 0,
-		eProtocol643,
-		eProtocolNet,
-		eProtocolWeb
+		eProtocol643
 	};
 
 	// Constructor
 	TenzoM() {     
-		try {
-			// detect decimal separator
-			DecimalPoint = stof("0,5") > 0.1 ? ',' : '.';
-		}
-		catch (...)
-		{
-		}
+		DecimalPoint = stof("0,5") > 0.1 ? ',' : '.'; // detect decimal separator
 	}
 	
 	// Destructor
@@ -92,12 +86,16 @@ public:
 		ClosePort();
 	}
 
+	u16string    Name      = u"";
 	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
-	
-	char Adr      = 1;     // Адрес устройства
+	char Adr   = 1;     // Адрес устройства
+	bool NScal = false; // Флаг использования второго тезнодатчика
+	bool Event = false; // Флаг присутствия события (введён код с клиавиатуры)
+
 	bool Calm     = false; // Вес стабилен
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
+	bool NetMode  = false; // Режим работы по TCP/IP вместо COM-порта
 	char DecimalPoint = '.';
 
 	int  EmulMinKg = 9;    // Минимальный вес в килограммах при эмуляции веса
@@ -106,10 +104,8 @@ public:
 	bool WriteLog = false; // Писать в лог все отправленные и полученные байты
 	u16string LogFile = u"tenzom.log";
 
-	u16string IP    = u"127.0.0.1"; // IP-адрес для протоколов web или net
-	int     NetPort = 5001;         // Порт для протокола net
-	int     WebPort = 8080;         // Порт для протокола web
-	u16string Name  = u"Весы1";     // Имя весов для работы по web или net
+	u16string IP      = u"127.0.0.1"; // IP-адрес для протоколов web или net
+	int       NetPort = 4001;         // Порт для протокола net
 
 	unsigned long LastError = 0;
 	u16string     Error     = { 0 };
@@ -119,9 +115,16 @@ public:
 	bool PortOpened();
 	void ClosePort();
 
+	u16string    GetFreeComPorts();
+
 	TenzoMSTATUS GetStatus();
 	bool         SetZero();
 	int          GetWeight();
 	void         SwitchToWeighing();
-	u16string    GetFreeComPorts();
+	u16string    GetIndicatorText(int line);
+	bool         SetIndicatorText(int line, u16string text);
+	u16string    GetEnteredCode();
+	bool         SetInputChannel(int channelNum);
+	bool		 Tare();
+	u16string    Version();
 };

@@ -27,9 +27,11 @@ int main(int argc, char** argv)
 	}
 
 	TenzoM tenzom;
-	tenzom.IP		= u"192.168.93.21";
-	tenzom.Name		= u"Весы2";
-	tenzom.Protocol = TenzoM::eProtocolNet;
+	tenzom.IP		= u"192.168.93.220";
+	tenzom.NetPort  = 4001;
+	tenzom.NetMode  = true;
+	//tenzom.Name		= u"Весы2";
+	tenzom.Protocol = TenzoM::eProtocolTenzoM;
 	
 	tenzom.WriteLog = true;
 #ifdef ISWINDOWS
@@ -45,13 +47,34 @@ int main(int argc, char** argv)
 #else
 	printf("comports: %ls\n", comports.c_str());
 #endif
-
-
-	bool success = tenzom.OpenPort(comPort, 9600, 1);
+	int ves;
+	bool success = tenzom.OpenPort(comPort, 9600, 7);
 	if (success)
 	{
-		int ves = tenzom.GetWeight();
-		printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? "1" : "0");
+		auto ver = tenzom.Version();
+		printf("Version: %ls\n", ver.c_str());
+
+		tenzom.SwitchToWeighing();
+		auto s1 = tenzom.GetIndicatorText(0);
+		printf("Text: %ls\n", s1.c_str());
+
+		//tenzom.SetIndicatorText(0, u"Hello my friend! This is the test of text lenght");
+		//tenzom.SetIndicatorText(2, u"Привет!");
+
+		for (int i = 0; i < 1; i++)
+		{
+			ves = tenzom.GetWeight();
+			printf("ves: %d Calm: %s Event: %s\n", ves, tenzom.Calm ? "1" : "0", tenzom.Event ? "1" : "0");
+
+			if (tenzom.Event)
+			{
+				auto code = tenzom.GetEnteredCode();
+				printf("Code: %s\n", code.c_str());
+			}
+			Sleep(100);
+		}
+		//ves = tenzom.GetWeight();
+		//printf("ves: %d Calm: %s\n", ves, tenzom.Calm ? "1" : "0");
 	}
 	else
 	{

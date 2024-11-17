@@ -17,6 +17,7 @@
 #include <sstream>
 #include <iomanip>
 #include "TenzoM.h"
+#include <codecvt>
 
 #ifdef ISWINDOWS
 #pragma comment (lib, "Ws2_32.lib")
@@ -37,6 +38,8 @@
 
 using namespace std;
 
+#pragma region ТехническиеФункцииРаботыСОборудованием
+
 bool TenzoM::TryConnectTo()
 {
     bool success = false;
@@ -50,7 +53,7 @@ bool TenzoM::TryConnectTo()
 #endif
         struct addrinfo* result = NULL, * ptr = NULL, hints = { 0 };
 
-        string port_as_string = to_string(Protocol == eProtocolWeb ? WebPort : NetPort);
+        string port_as_string = to_string(NetPort);
         string node(IP.begin(), IP.end());
 
         hints.ai_family   = AF_UNSPEC;
@@ -64,8 +67,11 @@ bool TenzoM::TryConnectTo()
 
                 if (clientSocket != INVALID_SOCKET)
                 {
+                    saddr    = ptr->ai_addr;
+                    saddrlen = ptr->ai_addrlen;
+
                     int optval = 1;
-                    setsockopt(clientSocket, SOL_SOCKET, SO_KEEPALIVE, (char*)&optval, sizeof(optval));
+                    //setsockopt(clientSocket, SOL_SOCKET, SO_KEEPALIVE, (char*)&optval, sizeof(optval));
                     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char*)&tcpTimeout, sizeof(tcpTimeout));
                     err = connect(clientSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
                     if (!err) {
@@ -84,7 +90,6 @@ bool TenzoM::TryConnectTo()
 
     return success;
 }
-
 
 /// <summary>
 /// Открыть COM порт для общения с устройствами тензотермическими датчиками
@@ -106,12 +111,11 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
 
     if (Emulate) return true;
 
-    if ((Protocol == eProtocolNet) || (Protocol == eProtocolWeb))
+    if (NetMode)
     {
         success = TryConnectTo();
     }
-
-    if ((Protocol == eProtocolTenzoM) || (Protocol == eProtocol643))
+    else
     {
 #ifdef ISWINDOWS
         SECURITY_ATTRIBUTES sa = { 0 };
@@ -220,7 +224,7 @@ void TenzoM::Delay(unsigned long ms)
 /// <returns>Возвращает true - если к COM-порту в данный момент установлено соединение.</returns>
 bool TenzoM::PortOpened()
 {
-    if ((Protocol == eProtocolNet) || (Protocol == eProtocolWeb))
+    if (NetMode)
     {
 #ifdef ISWINDOWS
         return (clientSocket != INVALID_SOCKET);
@@ -251,66 +255,74 @@ unsigned long TenzoM::Receive()
 
     try
     {
-        if (!PortOpened()) return 0;
-
         memset(readBuffer, 0, RECV_BUFFER_LENGHT);
+
+        if (!PortOpened()) return 0;
         Delay(50);
 
-#ifdef ISWINDOWS
-        OVERLAPPED osReader = { 0 };
-        osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-        if (osReader.hEvent)
+        if (NetMode)
         {
-            if (!ReadFile(comPort, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
-                if (GetLastError() == ERROR_IO_PENDING)
-                {
-                    dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
-                    switch (dwResult)
+            dwReadBytes = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
+            bSuccess = dwReadBytes > 0;
+        }
+        else
+        {
+    #ifdef ISWINDOWS
+            OVERLAPPED osReader = { 0 };
+            osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+            if (osReader.hEvent)
+            {
+                if (!ReadFile(comPort, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
+                    if (GetLastError() == ERROR_IO_PENDING)
                     {
-                        // Read completed.
-                    case WAIT_OBJECT_0:
-                        if (!GetOverlappedResult(comPort, &osReader, &dwReadBytes, FALSE))
+                        dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
+                        switch (dwResult)
                         {
-                            // Error in communications; report it.
-                            bSuccess = false;
-                        }
-                        else
-                        {
-                            // Read completed successfully.
-                            bSuccess = true;
-                        }
-                        break;
+                            // Read completed.
+                        case WAIT_OBJECT_0:
+                            if (!GetOverlappedResult(comPort, &osReader, &dwReadBytes, FALSE))
+                            {
+                                // Error in communications; report it.
+                                bSuccess = false;
+                            }
+                            else
+                            {
+                                // Read completed successfully.
+                                bSuccess = true;
+                            }
+                            break;
 
-                    case WAIT_TIMEOUT:
-                        // Operation isn't complete yet. fWaitingOnRead flag isn't
-                        // changed since I'll loop back around, and I don't want
-                        // to issue another read until the first one finishes.
-                        //
-                        // This is a good time to do some background work.
-                        LastError = 1;
-                        Error = u"Нет ответа от переданных команд";
-                        return 0;
-                        break;
+                        case WAIT_TIMEOUT:
+                            // Operation isn't complete yet. fWaitingOnRead flag isn't
+                            // changed since I'll loop back around, and I don't want
+                            // to issue another read until the first one finishes.
+                            //
+                            // This is a good time to do some background work.
+                            LastError = 1;
+                            Error = u"Нет ответа от переданных команд";
+                            return 0;
+                            break;
 
-                    default:
-                        // Error in the WaitForSingleObject; abort.
-                        // This indicates a problem with the OVERLAPPED structure's
-                        // event handle.
-                        break;
+                        default:
+                            // Error in the WaitForSingleObject; abort.
+                            // This indicates a problem with the OVERLAPPED structure's
+                            // event handle.
+                            break;
+                        }
                     }
                 }
+                else
+                {
+                    // read completed immediately
+                    bSuccess = true;
+                }
             }
-            else
-            {
-                // read completed immediately
-                bSuccess = true;
-            }
-        }
-#else // POSIX
-        dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGHT);
-        bSuccess = dwReadBytes > 0;
-#endif
+    #else // POSIX
+            dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGHT);
+            bSuccess = dwReadBytes > 0;
+    #endif
 
+        }
     }
     catch (...) {}
 
@@ -331,35 +343,43 @@ unsigned long TenzoM::Receive()
 /// <returns></returns>
 bool TenzoM::Send(char* message, long msgSize)
 {
-    if (!PortOpened()) return 0;
     bool bSuccess = false;
+    if (!PortOpened()) return bSuccess;
     unsigned long dwBytesWritten = 0;
-
-#ifdef ISWINDOWS
-    OVERLAPPED osWrite  = { 0 };
-    osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (osWrite.hEvent)
+    
+    if (NetMode)
     {
-        if (!WriteFile(comPort, message, msgSize, &dwBytesWritten, &osWrite))
-        {
-            if (GetLastError() == ERROR_IO_PENDING) {
-                // Write is pending.
-                if (GetOverlappedResult(comPort, &osWrite, &dwBytesWritten, TRUE))
-                    // Write operation completed successfully.
-                    bSuccess = true;
-            }
-        }
-        else
-        {
-            // WriteFile completed immediately.
-            bSuccess = true;
-        }
-        CloseHandle(osWrite.hEvent);
+        dwBytesWritten = send(clientSocket, message, msgSize, 0);
+        bSuccess = dwBytesWritten > 0;
     }
+    else
+    {
+#ifdef ISWINDOWS
+        OVERLAPPED osWrite = { 0 };
+        osWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (osWrite.hEvent)
+        {
+            if (!WriteFile(comPort, message, msgSize, &dwBytesWritten, &osWrite))
+            {
+                if (GetLastError() == ERROR_IO_PENDING) {
+                    // Write is pending.
+                    if (GetOverlappedResult(comPort, &osWrite, &dwBytesWritten, TRUE))
+                        // Write operation completed successfully.
+                        bSuccess = true;
+                }
+            }
+            else
+            {
+                // WriteFile completed immediately.
+                bSuccess = true;
+            }
+            CloseHandle(osWrite.hEvent);
+        }
 #else // POSIX
-	dwBytesWritten = write(fd, message, msgSize);
-    bSuccess = (dwBytesWritten == msgSize);
+        dwBytesWritten = write(fd, message, msgSize);
+        bSuccess = (dwBytesWritten == msgSize);
 #endif
+    }
 
     if (!bSuccess) CheckLastError();
     else if (dwBytesWritten > 0)
@@ -440,10 +460,6 @@ bool TenzoM::SendCommand(char command)
         success = Send(msg2, 1);
         break;
     }
-    case TenzoM::eProtocolNet:
-        break;
-    case TenzoM::eProtocolWeb:
-        break;
     default:
         break;
     }
@@ -488,332 +504,125 @@ void TenzoM::SetCrcOfMessage(char* buffer, long bufSize)
 }
 
 /// <summary>
-/// Извлечение веса из полученных данных
+/// Поиск в считнанных данных readBuffer начала и конца пакета по продоколу TenzoM
 /// </summary>
-/// <returns>Возвращает полученный вес в граммах.
-/// Также устанавливает свойства стабильности веса и перегруза.</returns>
-int TenzoM::ExtractWeight(char* lpBuf)
+/// <param name="bytesRead">Количество считанных байт</param>
+/// <param name="command">Код операции, ответ на который мы посылали ищем</param>
+/// <returns>Возвращает true, пакет с нашим адресом устройства и кодом операции был найден</returns>
+bool TenzoM::FindTenzoMPacket(long bytesRead, char command)
 {
-    int       weight     = 0; // Вычисленный вес
-    const int offset     = 3; // Смещение от начала буфера, где идут байты веса
-    const int bytes      = 3; // Количество байт для считывания упакованного в BCD веса (у TenzoM - 3)
-    int       multiplier = 1; // Множитель (вычисляется для разных разрядов)
-
-    // Распаковка цифр веса из BCD формата (младшие байты первые)
-    for (int i = 0; i < bytes; i++)
-    {
-        auto byte = lpBuf[offset + i];
-        weight += ((byte >> 4) * 10 + (byte & '\x0F')) * multiplier;
-        multiplier *= 100;
-    }
-
-    // За весом в полученном буфере идёт байт CON с дополнительными фалагами
-    const char con = lpBuf[offset + bytes];
-
-    // Т.к. возврращаем в граммах, то считаем, сколько добавить нулей к результату
-    int addNulls = 3 - (con & '\x07'); // Первые три бита - позиция запятой
-    multiplier = 1; while (addNulls--) multiplier *= 10;
-
-    if (con & '\x80') weight *= -1; // Определяем, стоит ли флаг минус
-
-    Calm = (con & '\x10'); // Флаг успокоения веса (вес стабилен)
-    Overload = (con & '\x08'); // Флаг перегруза
-
-    return weight * multiplier;
+    char* data     = readBuffer;
+    long  dataSize = 0;
+    return FindTenzoMPacket(bytesRead, command, data, dataSize);
 }
 
-
 /// <summary>
-/// Обнулить показания веса
+/// Поиск в считнанных данных readBuffer начала и конца пакета по продоколу TenzoM
 /// </summary>
-bool TenzoM::SetZero()
+/// <param name="bytesRead">Количество считанных байт</param>
+/// <param name="command">Код операции, ответ на который мы посылали ищем</param>
+/// <param name="data">Выходной параметр: указатель на начало данных в пакете</param>
+/// <param name="dataSize">Выходной параметр: длина данных в найденном пакете</param>
+/// <returns>Возвращает true, пакет с нашим адресом устройства и кодом операции был найден</returns>
+bool TenzoM::FindTenzoMPacket(long bytesRead, char command, char*& data, long& dataSize)
 {
-    bool success = false;
-
-    if (Protocol == eProtocol643)
+    bool success     = false;
+    char prevByte    = '\x00';
+    int  offsetBegin = 0;
+    int  offsetEnd   = 0;
+    int  adr         = 0;
+    char cop         = 0;
+    data     = readBuffer;
+    dataSize = 0;
+    if (bytesRead > 5)
     {
-        if (SendCommand('\x0D'))
+        // Поиск начала пакета
+        while (offsetBegin < bytesRead - 5)
         {
-            success = Receive() > 0;
+            if ((readBuffer[offsetBegin] == '\xFF') && (prevByte != '\xFE'))
+            {
+                // Это начало пакета. Получаем адрес устройства и код операции.
+                adr = readBuffer[offsetBegin + 1];
+                cop = readBuffer[offsetBegin + 2];
+                if (adr == 0)
+                {
+                    adr = readBuffer[offsetBegin + 2] + (readBuffer[offsetBegin + 3] * 256) + (readBuffer[offsetBegin + 4] * 65536);
+                    cop = readBuffer[offsetBegin + 5];
+                    offsetBegin += 6; // Фокусируемся начале данных (байт после адреса)
+                }
+                else
+                {
+                    offsetBegin += 3; // Фокусируемся начале данных (байт после адреса)
+                }
+                if ((adr != Adr) || (cop != command)) continue; // Проверяем, наш ли это пакет
+                break;
+            }
+            prevByte = readBuffer[offsetBegin];
+            offsetBegin++;
+        }
+        offsetEnd = offsetBegin;
+        // Поиск конца пакета
+        while (offsetEnd < bytesRead - 1)
+        {
+            if ((readBuffer[offsetEnd] == '\xFF') && (readBuffer[offsetEnd + 1] == '\xFF'))
+            {
+                offsetEnd -= 1; // Фокусируемся на смещении после данных (байт контрольного значением CRC)
+                break;
+            }
+            offsetEnd++;
         }
     }
-    else if (Protocol == eProtocolTenzoM)
+
+    if (offsetBegin > 0) // Если был найден пакет
     {
-        if (SendCommand('\xBF'))
+        success = true;
+        if (offsetEnd > offsetBegin)
         {
-            success = Receive() > 0;
+            data     = readBuffer + offsetBegin; // Указатель на начало данных в пакете
+            dataSize = offsetEnd  - offsetBegin; // Длина данных
         }
     }
 
     return success;
 }
 
-vector<char> HexToBytes(const string& hex) {
-    vector<char> bytes;
-
-    for (unsigned int i = 0; i < hex.length(); i += 2) {
-        std::string byteString = hex.substr(i, 2);
-        char byte = (char)strtol(byteString.c_str(), NULL, 16);
-        bytes.push_back(byte);
-    }
-
-    return bytes;
-}
-
-void addLinesFromString(vector<string>& lines, string s, string delimiter) {
-    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
-
-    while ((pos_end = s.find(delimiter, pos_start)) != string::npos) {
-        lines.push_back(s.substr(pos_start, pos_end - pos_start));
-        pos_start = pos_end + delim_len;
-    }
-}
-
 /// <summary>
-/// Проверяет есть вернул ли Controller Net (или Controller 5) ошибку
+/// Извлечение веса из полученных данных
 /// </summary>
-/// <param name="sCode">Строка с кодом ошибки</param>
-void TenzoM::CheckTenzoNetCodeError(string sCode)
+/// <returns>Возвращает полученный вес в граммах.
+/// Также устанавливает свойства стабильности веса и перегруза.</returns>
+int TenzoM::ExtractWeight(char* data, long dataSize)
 {
-    try
+    if (dataSize < 4) return 0;
+
+    int       weight     = 0; // Вычисленный вес
+    const int bytes      = 3; // Количество байт для считывания упакованного в BCD веса (у TenzoM - 3)
+    int       multiplier = 1; // Множитель (вычисляется для разных разрядов)
+
+    // Распаковка цифр веса из BCD формата (младшие байты первые)
+    for (int i = 0; i < bytes; i++)
     {
-        int code = stoi(sCode);
-        switch (code)
-        {
-        case -5000: LastError = code; Error = u"Терминал не обнаружен" ; break;
-        case -5001: LastError = code; Error = u"С терминалом нет связи"; break;
-        case -5002: Calm = true ; break;
-        case -5003: Calm = false; break;
-        case -5005: LastError = code; Error = u"Ошибочный вызов метода"; break;
-        default: LastError = code; break;
-        }
-    }
-    catch (...)
-    {
-
-    }
-}
-
-/// <summary>
-/// Получить вес
-/// </summary>
-/// <returns>Возвращает вес брутто</returns>
-int TenzoM::GetWeight()
-{
-    int  weight = 0;
-    long dwBytesRead  = 0;
-    bool errorOccured = false;
-
-    if (Emulate) return RandomWeight();
-
-    if (!PortOpened()) return weight;
-
-    if ((Protocol == eProtocolNet) && (clientSocket != INVALID_SOCKET))
-    {
-        wstring name(Name.begin(), Name.end()); name += L"\r\n";
-        size_t  simbolsCount;
-#ifdef ISWINDOWS
-        wcstombs_s(&simbolsCount, readBuffer, &name.at(0), sizeof(readBuffer));
-#else
-        simbolsCount = wcstombs(readBuffer, &name.at(0), sizeof(readBuffer));
-#endif
-        Log(u"Send", readBuffer, simbolsCount);
-        int result = send(clientSocket, readBuffer, simbolsCount, 0);
-        if (result == simbolsCount)
-        {
-            vector<string> lines;
-            int bytesrecv = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
-            if (bytesrecv > 0)
-            {
-                Log(u"Receive", readBuffer, bytesrecv);
-                string data(readBuffer, bytesrecv);
-                addLinesFromString(lines, data, "\r\n");
-            }
-            if (lines.size() < 2)
-            {
-                bytesrecv = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
-                if (bytesrecv > 0)
-                {
-                    Log(u"Receive", readBuffer, bytesrecv);
-                    string data(readBuffer, bytesrecv);
-                    addLinesFromString(lines, data, "\r\n");
-                }
-            }
-
-            if (lines.size() > 1)
-            {
-                // Поиск в переданных строках кода состояния выполнения команды (начинается на знак "-")
-                for (auto &line : lines)
-                {
-                    if (line.size() == 0) continue;
-                    float value = 0;
-                    try
-                    {
-                        size_t ppos = line.find('.');
-                        if (ppos != string::npos)
-                        {
-                            string deciPnt(1, DecimalPoint);
-                            line.replace(ppos, 1, deciPnt);
-                        }
-                        value = stof(line);
-                    }
-                    catch (...)
-                    {
-                    }
-                    if (value < -4999)
-                    {
-                        CheckTenzoNetCodeError(line);
-                    }
-                    else
-                    {
-                        weight = (int)(value * 1000);
-                    }
-                }
-            }
-            else if (bytesrecv == -1)
-            {
-                errorOccured = true;
-            }
-        }
-        else
-        {
-            errorOccured = true;
-        }
-
-        if (errorOccured)
-        {
-#ifdef ISWINDOWS
-            LastError = WSAGetLastError();
-            SetErrorText(LastError);
-#else
-            CheckLastError();
-#endif
-            ClosePort();
-        }
+        auto byte = data[i];
+        weight += ((byte >> 4) * 10 + (byte & '\x0F')) * multiplier;
+        multiplier *= 100;
     }
 
+    weight = weight * 1000; // Возвращаем вес всегда граммах
 
-    if (Protocol == eProtocol643)
-    {
-        if (SendCommand('\x10'))
-        {
-            dwBytesRead = Receive();
+    // За весом в полученном буфере идёт байт CON с дополнительными фалагами
+    const char con = data[bytes];
 
-            //auto arr = HexToBytes("ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e3824ff3d20203130382e38243d20203130382e3824");
-            //for (int i = 0; i < arr.size(); i++)
-            //{
-            //    readBuffer[i] = arr[i];
-            //    dwBytesRead = i;
-            //}
+    int commaPosition = con & '\x07'; // Первые три бита - позиция запятой 
+    int delimiter = 1; while (commaPosition--) delimiter *= 10;
+    weight /= delimiter; // Делим вес на посчитанный делитель (при сдвиге запятой)
 
-            if (dwBytesRead > 8)
-            {
-                // поиск последнего символа '=' в полученной последовательности
-                char* msg = nullptr;
-                int offset = 0;
-                while (dwBytesRead - offset >= 8)
-                {
-                    char* currPointer = readBuffer + offset;
-                    if (currPointer[0] == '=')
-                        msg = currPointer;
-                    offset++;
-                }
-                if (msg != nullptr)
-                {
-                    // Заменяем знак разделителя точки на знак разделителя дробной части
-                    // как указано в нашей системе чтобы сработала функция stof
-                    //char decimalPoint = localeconv()->decimal_point[0];
-                    for (int i = 0; i < (dwBytesRead - offset); i++)
-                    {
-                        if (msg[i] == '\x2E') msg[i] = DecimalPoint;
-                    }
-
-                    try
-                    {
-                        auto val = stof(msg + 1);
-                        weight = (int)(val * 1000);
-                    }
-                    catch (...) { }
-
-                    char lastByte = msg[8];
-                    if (!(lastByte & 0x04))
-                    {
-                        weight /= 10;
-                    }
-                    Calm = !(lastByte & 0x01);
-                }
-            }
-        }
-    }
-
-    if (Protocol == eProtocolTenzoM)
-    {
-        if (SendCommand('\xC3'))
-        {
-            dwBytesRead = Receive();
-            if (dwBytesRead > 8)
-            {
-                char* lpBuf = FindTenzoMPacket(dwBytesRead);
-                weight = ExtractWeight(lpBuf);
-            }
-        }
-    }
-    Log((u16string)(u"Ves: " + (char16_t)weight) + u" Calm: " + (Calm ? u"1": u"0"));
+    if (con & '\x80') weight *= -1; // Определяем, стоит ли флаг минус
+    Event    = (con & '\x40'); // Флаг присутствия события (введён код с клиавиатуры)
+    NScal    = (con & '\x20'); // Флаг использования второго тезнодатчика (в описании протокола написано "текущий номер используемых весов")
+    Calm     = (con & '\x10'); // Флаг успокоения веса (вес стабилен)
+    Overload = (con & '\x08'); // Флаг перегруза
 
     return weight;
-}
-
-/// <summary>
-/// Поиск в считнанных данных readBuffer начала пакета по протоколу TenzoM
-/// </summary>
-/// <param name="bytesRead">Количество считанных байт</param>
-/// <returns>Возвращает указатель на начало пакета</returns>
-char* TenzoM::FindTenzoMPacket(long bytesRead)
-{
-    char prevByte = '\x00';
-    char currByte;
-    int  offset = 0;
-    while (offset < bytesRead)
-    {
-        currByte = readBuffer[offset];
-        if ((currByte == '\xFF') && (prevByte != '\xFE'))
-            break;
-        offset++;
-    }
-    return readBuffer + offset;
-
-}
-
-/// <summary>
-/// Переключить в режим взвешивания
-/// </summary>
-void TenzoM::SwitchToWeighing()
-{
-    switch (Protocol)
-    {
-    case TenzoM::eProtocolTenzoM:
-    {
-        if (SendCommand('\xCD'))
-        {
-            Receive();
-        }
-        break;
-    }
-    case TenzoM::eProtocol643:
-    {
-        if (SendCommand('\x18'))
-        {
-            Receive();
-        }
-        break;
-    }
-    case TenzoM::eProtocolNet:
-        break;
-    case TenzoM::eProtocolWeb:
-        break;
-    default:
-        break;
-    }
 }
 
 /// <summary>
@@ -844,8 +653,8 @@ u16string TenzoM::GetFreeComPorts()
         {
             LastError = 2;
             Error = p.generic_u16string() + u" does not exist";
-            Log(u"Error "+Error);
-        } 
+            Log(u"Error " + Error);
+        }
         else
         {
             for (auto de : filesystem::directory_iterator(p))
@@ -861,7 +670,7 @@ u16string TenzoM::GetFreeComPorts()
     }
     catch (...)
     {
-        CheckLastError();        
+        CheckLastError();
     }
 #endif
     sort(port_names.begin(), port_names.end());
@@ -875,6 +684,49 @@ u16string TenzoM::GetFreeComPorts()
     return u16string(s.begin(), s.end());
 }
 
+#pragma endregion
+
+#pragma region ВспомогательныеФункции
+
+u16string GetText(char* data, long datsSize)
+{
+    u16string text = u"";
+    int wchlen = MultiByteToWideChar(CP_ACP, 0, data, datsSize, NULL, 0);
+    if (wchlen > 0 && wchlen != 0xFFFD)
+    {
+        wstring wstr(wchlen, 0);
+        MultiByteToWideChar(CP_ACP, 0, data, datsSize, &wstr[0], wchlen);
+        text = u16string(wstr.begin(), wstr.end());
+    }
+    return text;
+}
+
+/// <summary>
+/// Конвертация кодировки из u16string в UTF-8 cp1251
+/// </summary>
+string UTF16_to_CP1251(u16string const& utf16)
+
+{
+    if (!utf16.empty())
+    {
+        std::wstring str = wstring(utf16.begin(), utf16.end());
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
+        std::string utf8 = convert.to_bytes(str);
+
+        int wchlen = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), utf8.size(), NULL, 0);
+        if (wchlen > 0 && wchlen != 0xFFFD)
+        {
+            std::vector<wchar_t> wbuf(wchlen);
+            MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), utf8.size(), &wbuf[0], wchlen);
+            std::vector<char> buf(wchlen);
+            WideCharToMultiByte(1251, 0, &wbuf[0], wchlen, &buf[0], wchlen, 0, 0);
+
+            return std::string(&buf[0], wchlen);
+        }
+    }
+    return std::string();
+}
+
 /// <summary>
 /// Получение рандомного веса
 /// </summary>
@@ -886,7 +738,7 @@ int TenzoM::RandomWeight()
     {
         random_device dev;
         mt19937 rng(dev());
-        uniform_int_distribution<mt19937::result_type> dist48_145(EmulMinKg*10, EmulMaxKg*10);
+        uniform_int_distribution<mt19937::result_type> dist48_145(EmulMinKg * 10, EmulMaxKg * 10);
 
         emulTargetWeight = dist48_145(rng) * 100;
 
@@ -968,7 +820,7 @@ void TenzoM::SetErrorText(unsigned long errorCode)
         }
         if (LastError)
         {
-            Log(u"Error: "+Error);
+            Log(u"Error: " + Error);
         }
     }
     catch (...) {}
@@ -982,7 +834,7 @@ void TenzoM::CheckLastError()
 {
     Error.clear();
 #ifdef ISWINDOWS
-    if (Protocol == eProtocolNet)
+    if (NetMode)
         LastError = WSAGetLastError();
     else
         LastError = GetLastError();
@@ -1049,42 +901,395 @@ void TenzoM::Log(u16string logMsg, char* buf, int buflen)
 
         outfile.close();
 
-/*
-
-#pragma warning(suppress : 4996)
-        FILE* file = fopen(filename.c_str(), "ab");
-
-        fwrite(timeLabel, sizeof(char), strlen(timeLabel), file);
-
-        string s(logMsg.begin(), logMsg.end());
-        if (buflen == 0)
-            s += "\n";
-        else
-            s += " ";
-
-#pragma warning(suppress : 4996)
-        fwrite(s.c_str(), sizeof(char), s.size(), file);
-
-        if (buflen > 0)
-        {
-            char hexstr[201];
-            memset(hexstr, 0, 201);
-            int i;
-            for (i = 0; i < buflen; i++) {
-#pragma warning(suppress : 4996)
-                sprintf(hexstr + i * 2, "%02x", buf[i]);
-            }
-            hexstr[i * 2] = '\n';
-#pragma warning(suppress : 4996)
-            fwrite(hexstr, 1, i * 2 + 1, file);
-        }
-
-        fclose(file);
-    */
-        }
+    }
     catch (...)
     {
         WriteLog = false;
     }
 }
 
+#pragma endregion
+
+#pragma region РаботаСВесами
+
+/// <summary>
+/// Обнулить показания веса
+/// </summary>
+bool TenzoM::SetZero()
+{
+    bool success = false;
+
+    if (Protocol == eProtocol643)
+    {
+        if (SendCommand('\x0D'))
+        {
+            success = Receive() > 0;
+        }
+    }
+    else if (Protocol == eProtocolTenzoM)
+    {
+        if (SendCommand('\xBF'))
+        {
+            success = Receive() > 0;
+        }
+    }
+
+    return success;
+}
+
+/// <summary>
+/// Получить вес
+/// </summary>
+/// <returns>Возвращает вес брутто</returns>
+int TenzoM::GetWeight()
+{
+    int  weight = 0;
+    long dwBytesRead = 0;
+
+    if (Emulate) return RandomWeight();
+
+    if (!PortOpened()) return weight;
+
+    if (Protocol == eProtocol643)
+    {
+        if (SendCommand('\x10'))
+        {
+            dwBytesRead = Receive();
+
+            if (dwBytesRead > 8)
+            {
+                // поиск последнего символа '=' в полученной последовательности
+                char* msg = nullptr;
+                int offset = 0;
+                while (dwBytesRead - offset >= 8)
+                {
+                    char* currPointer = readBuffer + offset;
+                    if (currPointer[0] == '=')
+                        msg = currPointer;
+                    offset++;
+                }
+                if (msg != nullptr)
+                {
+                    // Заменяем знак разделителя точки на знак разделителя дробной части
+                    // как указано в нашей системе чтобы сработала функция stof
+                    //char decimalPoint = localeconv()->decimal_point[0];
+                    for (int i = 0; i < (dwBytesRead - offset); i++)
+                    {
+                        if (msg[i] == '\x2E') msg[i] = DecimalPoint;
+                    }
+
+                    try
+                    {
+                        auto val = stof(msg + 1);
+                        weight = (int)(val * 1000);
+                    }
+                    catch (...) {}
+
+                    char lastByte = msg[8];
+                    if (!(lastByte & 0x04))
+                    {
+                        weight /= 10;
+                    }
+                    Calm = !(lastByte & 0x01);
+                }
+            }
+        }
+    }
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        constexpr char command = '\xC3';
+        if (SendCommand(command))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                char* data = readBuffer;
+                long  dataSize = 0;
+                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
+                if (dataSize > 0)
+                {
+                    weight = ExtractWeight(data, dataSize);
+                }
+            }
+        }
+    }
+
+    Log((u16string)(u"Ves: " + (char16_t)weight) + u" Calm: " + (Calm ? u"1" : u"0"));
+
+    return weight;
+}
+
+/// <summary>
+/// Переключить в режим взвешивания
+/// </summary>
+void TenzoM::SwitchToWeighing()
+{
+    switch (Protocol)
+    {
+    case TenzoM::eProtocolTenzoM:
+    {
+        if (SendCommand('\xCD'))
+        {
+            Receive();
+        }
+        break;
+    }
+    case TenzoM::eProtocol643:
+    {
+        if (SendCommand('\x18'))
+        {
+            Receive();
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+/// <summary>
+/// Получить значение индикаторов (высвечивающегося текста)
+/// </summary>
+/// <param name="line">0 - обе строки, 1 - верзняя строка, 2 - нижняя строка</param>
+/// <returns>Возвращается текст индикаторов</returns>
+u16string TenzoM::GetIndicatorText(int line)
+{
+    //u16string ttt = u"Привет! Это тест русского.";
+    //return ttt;
+
+    long dwBytesRead = 0;
+    u16string text = u"";
+    // 43 - 31 3A 48 45 54 54 4F 20 20 4B A1 3A 20 20 20 20 20 2D 31 38
+    // 20   1  :  H  E  T  T  O        K  ?? :                 -  1  8
+    //      31 36 2F 31 31 2F 32 34 20 20 20 20 31 39 3A 30 30 3A 35 31
+    //      1  6  /  1  1  /  2  4              1  9  :  0  8  :  5  1
+    if (!PortOpened()) return text;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        char command  = '\xC6';
+        char lineCode = '\x21';
+        switch (line)
+        {
+        case 1: lineCode = '\x1F'; break;
+        case 2: lineCode = '\x20'; break;
+        default: break;
+        }
+
+        char msg1[] = { '\xFF', Adr, command, lineCode, '\x00', '\xFF', '\xFF' };
+        SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        bool success = Send(msg1, sizeof(msg1));
+        if (success)
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                char* data = readBuffer;
+                long  dataSize = 0;
+                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
+                if (dataSize > 0)
+                {
+                    long msgLen = dataSize - 2;
+                    text = GetText(data+2, msgLen);
+                }
+            }
+        }
+    }
+
+    return text;
+}
+
+/// <summary>
+/// Вывести символьное сообщение на устройство отображения или вывода
+/// </summary>
+/// <param name="line">0 - на все строки, 1 = верхняя строка, 2 - нижняя строка</param>
+/// <param name="text">Текст, выводимый на индикаторы</param>
+/// <returns>Возвращает true, если передача прошла успешно</returns>
+bool TenzoM::SetIndicatorText(int line, u16string text)
+{
+    bool success = false;
+    long dwBytesRead = 0;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        char lineCode = '\x22';
+        switch (line)
+        {
+        case 1: lineCode = '\x21'; break;
+        case 2: lineCode = '\x20'; break;
+        default:
+            break;
+        }
+
+        auto t = UTF16_to_CP1251(text);
+        //std::wstring str = wstring(text.begin(), text.end());
+        //std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
+        //std::string t = convert.to_bytes(str);
+
+        auto s = t.c_str();
+        int len = strlen(s);
+        if (len > 50) len = 50;
+
+        readBuffer[0] = '\xFF';
+        readBuffer[1] = Adr;
+        readBuffer[2] = '\xD2';
+        readBuffer[3] = lineCode;
+        readBuffer[4] = len;
+
+        //readBuffer[5] = '\x7F';
+        //readBuffer[6] = '\x60';
+        //readBuffer[7] = '\x80';
+        //len = 3;
+        for (int i = 0; i < len; i++)
+        {
+            readBuffer[5 + i] = s[i];
+        }
+        readBuffer[len + 5] = '\x00';
+        readBuffer[len + 6] = '\xFF';
+        readBuffer[len + 7] = '\xFF';
+
+        int messageLen = len + 8;
+
+        //char msg1[] = { '\xFF', Adr, '\xD2', '\x21', '\x00', '\xFF', '\xFF' };
+        SetCrcOfMessage(readBuffer, messageLen); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        success = Send(readBuffer, messageLen);
+        if (success)
+        {
+            dwBytesRead = Receive();
+        }
+    }
+    return success;
+}
+
+/// <summary>
+/// Запрос введенного кода
+/// </summary>
+/// <returns>Возвращается символ введённого кода ("0"..."9", Перевод строки или пустая строка)</returns>
+u16string TenzoM::GetEnteredCode()
+{
+    long dwBytesRead = 0;
+    auto t = u16string();
+    char* lpBuf = readBuffer;
+    string s = "";
+
+    if (!PortOpened()) return t;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        char constexpr command = '\xC7';
+        if (SendCommand(command))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 6)
+            {
+                char* data = readBuffer;
+                long  dataSize = 0;
+                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
+                if (dataSize > 0)
+                {
+                    const char event = data[0];
+                    switch (event)
+                    {
+                    case '\xF1': s = "1"; break;
+                    case '\xF2': s = "2"; break;
+                    case '\xF3': s = "3"; break;
+                    case '\xF4': s = "4"; break;
+                    case '\xF5': s = "5"; break;
+                    case '\xF6': s = "6"; break;
+                    case '\xF7': s = "7"; break;
+                    case '\xF8': s = "8"; break;
+                    case '\xF9': s = "9"; break;
+                    case '\x30': s = "0"; break;
+                    case '\x31': s = "\n"; break;
+                    default: break;
+                    }
+
+                }
+                char msg1[] = { '\xFF', Adr, '\xD2', '\x00', '\x00', '\xFF', '\xFF' };
+                SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+                if (Send(msg1, sizeof(msg1)))
+                {
+                    dwBytesRead = Receive();
+                }
+
+            }
+        }
+    }
+
+    return u16string(s.begin(), s.end());
+}
+
+/// <summary>
+/// Установить номер входного канала
+/// </summary>
+/// <param name="channelNum">Номер канала (0...255)</param>
+/// <returns>Возвращает true, если передача команды прошла успешно</returns>
+bool TenzoM::SetInputChannel(int channelNum)
+{
+    bool success = false;
+    long dwBytesRead = 0;
+    if (channelNum > 255) channelNum = 0;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        char msg1[] = { '\xFF', Adr, '\xDC', char(channelNum), '\x00', '\xFF', '\xFF'};
+        SetCrcOfMessage(msg1, sizeof(msg1));
+        success = Send(msg1, sizeof(msg1));
+        if (success)
+        {
+            dwBytesRead = Receive();
+        }
+    }
+    return success;
+}
+
+/// <summary>
+/// Компенсировать вес тары:
+/// (Команда, эквивалентная нажатию кнопки «>Т<»)
+/// </summary>
+/// <returns>Возвращает true, если передача команды прошла успешно</returns>
+bool TenzoM::Tare()
+{
+    bool success = false;
+    if (Protocol == eProtocolTenzoM)
+    {
+        if (SendCommand('\xCE'))
+        {
+            success = Receive() > 0;
+        }
+    }
+    return success;
+}
+
+/// <summary>
+/// Тип устройства и версии ПО
+/// </summary>
+u16string TenzoM::Version()
+{
+    long dwBytesRead = 0;
+    u16string text = u"";
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        constexpr char command = '\xFD';
+        if (SendCommand(command))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 6)
+            {
+                char* data = readBuffer;
+                long  dataSize = 0;
+                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
+                if (dataSize > 0)
+                {
+                    text = GetText(data, dataSize);
+                }
+            }
+        }
+    }
+
+    return text;
+}
+
+#pragma endregion

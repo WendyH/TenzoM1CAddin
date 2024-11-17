@@ -22,10 +22,12 @@ public:
         ePropProtocol = 0,
         ePropIP,
         ePropNetPort,
-        ePropWebPort,
+        ePropNetMode,
         ePropName,
         ePropConnected,
         ePropAdr,
+        ePropEvent,
+        ePropNScal,
         ePropCalm,
         ePropOverload,
         ePropError,
@@ -47,6 +49,12 @@ public:
         eMethSetZero,
         eMethGetWeight,
         eMethSwitchToWeighing,
+        eMethGetGetEnteredCode,
+        eMethGetIndicatorText,
+        eMethSetIndicatorText,
+        eMethSetInputChannel,
+        eMethTare,
+        eMethGetDeviceInfo,
         eMethGetPorts,
         eMethVersion,
         eMethLast      // Always last
@@ -91,6 +99,7 @@ private:
     template <size_t N>
     long FindName(array<u16string, N>, const WCHAR_T* name);
     void CatchedException(exception_ptr eptr, u16string funcName);
+    bool ExternalEvent(u16string message, u16string data);
 
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> u16Convert;
 

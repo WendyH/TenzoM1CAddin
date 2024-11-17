@@ -19,17 +19,19 @@
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"01.03");
+static const u16string sVersion(u"02.00");
 
 static const array<u16string, CAddInNative::ePropLast> osProps =
 {
 	u"Protocol",
 	u"IP",
 	u"NetPort",
-	u"WebPort",
+	u"NetMode",
 	u"Name",
 	u"Connected",
 	u"Adr",
+	u"Event",
+	u"Scale2",
 	u"Calm",
 	u"Overload",
 	u"Error",
@@ -46,10 +48,12 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 	u"Протокол",
 	u"СетевойАдрес",
 	u"СетевойПорт",
-	u"ВебПорт",
+	u"СетевойРежим",
 	u"ИмяВесов",
 	u"Подключен",
 	u"АдресУстройства",
+	u"Событие",
+	u"ВторойДатчик",
 	u"ВесСтабилен",
 	u"Перегрузка",
 	u"Ошибка",
@@ -69,6 +73,12 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 	u"SetZero",
 	u"GetWeight",
 	u"SwitchToWeighing",
+	u"GetGetEnteredCode",
+	u"GetIndicatorText",
+	u"SetIndicatorText",
+	u"SetInputChannel",
+	u"Tare",
+	u"GetDeviceInfo",
 	u"GetPorts",
 	u"Version",
 };
@@ -80,6 +90,12 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"ОбнулитьПоказанияВеса", 
 	u"ПолучитьВес",
 	u"ПереключитьВРежимВзвешивания",
+	u"ПолучитьВведенныйКод",
+	u"ПолучитьТекстИндикатора",
+	u"УстановитьТекстИндикатора",
+	u"УстановитьВходнойКанал",
+	u"Тара",
+	u"ИнформацияОбУстройстве",
 	u"ПолучитьДоступныеПорты",
 	u"Версия"
 };
@@ -156,6 +172,7 @@ CAddInNative::~CAddInNative()
 	try
 	{
 		tenzom.ClosePort();
+
 	}
 	catch (...) { CatchedException(current_exception(), u"~CAddInNative"); }
 }
@@ -165,6 +182,7 @@ bool CAddInNative::Init(void* pConnection)
 	try
 	{
 		m_iConnect = (IAddInDefBase*)pConnection;
+		m_iConnect->SetEventBufferDepth(10);
 	}
 	catch (...) { CatchedException(current_exception(), u"Init"); }
 	return m_iConnect != NULL;
@@ -295,10 +313,10 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			TV_I4(pvarPropVal) = tenzom.NetPort;
 			return true;
 		}
-		case ePropWebPort:
+		case ePropNetMode:
 		{
-			TV_VT(pvarPropVal) = VTYPE_I4;
-			TV_I4(pvarPropVal) = tenzom.WebPort;
+			TV_VT(pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = tenzom.NetMode;
 			return true;
 		}
 		case ePropName:
@@ -316,6 +334,18 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 		{
 			TV_VT(pvarPropVal) = VTYPE_I1;
 			TV_I1(pvarPropVal) = tenzom.Adr;
+			return true;
+		}
+		case ePropEvent:
+		{
+			TV_VT(pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = tenzom.Event;
+			return true;
+		}
+		case ePropNScal:
+		{
+			TV_VT(pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = tenzom.NScal;
 			return true;
 		}
 		case ePropCalm:
@@ -413,9 +443,9 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			tenzom.NetPort = TV_I4(varPropVal);
 			return true;
 		}
-		case ePropWebPort:
+		case ePropNetMode:
 		{
-			tenzom.WebPort = TV_I4(varPropVal);
+			tenzom.NetMode = TV_BOOL(varPropVal);
 			return true;
 		}
 		case ePropName:
@@ -496,7 +526,7 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	case ePropProtocol:
 	case ePropIP:
 	case ePropNetPort:
-	case ePropWebPort:
+	case ePropNetMode:
 	case ePropName:
 	case ePropAdr:
 	case ePropError:
@@ -581,10 +611,11 @@ long CAddInNative::GetNParams(const long lMethodNum)
 {
 	switch (lMethodNum)
 	{
-	case eMethConnect:
-		return 3;
-	default:
-		return 0;
+	case eMethConnect		  : return 3;
+	case eMethGetIndicatorText: return 1;
+	case eMethSetIndicatorText: return 2;
+	case eMethSetInputChannel : return 1;
+	default: return 0;
 	}
 
 	return 0;
@@ -605,12 +636,14 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 {
 	try
 	{
-
 		switch (lMethodNum)
 		{
 		case eMethConnect:
 		case eMethGetStatus:
 		case eMethGetWeight:
+		case eMethGetGetEnteredCode:
+		case eMethGetIndicatorText:
+		case eMethGetDeviceInfo:
 		case eMethGetPorts:
 		case eMethVersion:
 			return true;
@@ -643,8 +676,24 @@ bool CAddInNative::CallAsProc(const long lMethodNum, tVariant* paParams, const l
 		case eMethSetZero:
 			tenzom.SetZero();
 			return true;
+		case eMethSetIndicatorText:
+		{
+			const int       line = paParams[0].ui8Val;
+			const u16string text = GetParamString(&paParams[1]);
+			tenzom.SetIndicatorText(line, text);
+			return true;
+		}
 		case eMethSwitchToWeighing:
 			tenzom.SwitchToWeighing();
+			return true;
+		case eMethSetInputChannel:
+		{
+			const int channelNum = paParams[0].ui8Val;
+			tenzom.SetInputChannel(channelNum);
+			return true;
+		}
+		case eMethTare:
+			tenzom.Tare();
 			return true;
 		case eMethVersion:
 			break;
@@ -677,8 +726,31 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		}
 		case eMethGetWeight:
 		{
+			auto weight = tenzom.GetWeight();
+			if (tenzom.Event)
+			{
+				auto code = tenzom.GetEnteredCode();
+				ExternalEvent(u"EnteredCode", code);
+			}
 			TV_VT(pvarRetValue) = VTYPE_I4;
-			TV_I4(pvarRetValue) = tenzom.GetWeight();
+			TV_I4(pvarRetValue) = weight;
+			return true;
+		}
+		case eMethGetGetEnteredCode:
+		{
+			auto code = tenzom.GetEnteredCode();
+			SetPropString(pvarRetValue, code);
+			return true;
+		}
+		case eMethGetIndicatorText:
+		{
+			int line = paParams[0].ui8Val;
+			SetPropString(pvarRetValue, tenzom.GetIndicatorText(line));
+			return true;
+		}
+		case eMethGetDeviceInfo:
+		{
+			SetPropString(pvarRetValue, tenzom.Version());
 			return true;
 		}
 		default:
@@ -908,4 +980,22 @@ void CAddInNative::CatchedException(exception_ptr eptr, u16string funcName)
 		const u16string sMessage(msg.begin(), msg.end());
 		addError(ADDIN_E_VERY_IMPORTANT, sCaption.c_str(), sMessage.c_str(), -1);
 	}
+}
+
+bool CAddInNative::ExternalEvent(u16string what, u16string data)
+{
+	const u16string who = u"TenzoM1CAddin";
+
+	try
+	{
+		if (m_iConnect)
+		{
+			m_iConnect->ExternalEvent((WCHAR_T*)who.c_str(), (WCHAR_T*)what.c_str(), (WCHAR_T*)data.c_str());
+		}
+		return true;
+	}
+	catch (...) { CatchedException(current_exception(), u"ExternalEvent"); }
+
+
+	return false;
 }
