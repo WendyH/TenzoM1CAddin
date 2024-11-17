@@ -691,11 +691,19 @@ u16string TenzoM::GetFreeComPorts()
 u16string GetText(char* data, long datsSize)
 {
     u16string text = u"";
-    int wchlen = MultiByteToWideChar(CP_ACP, 0, data, datsSize, NULL, 0);
+    long realSize = 0;
+    while (realSize < datsSize)
+    {
+        if (data[realSize] == 0)
+            break;
+        realSize++;
+    }
+
+    int wchlen = MultiByteToWideChar(CP_ACP, 0, data, realSize, NULL, 0);
     if (wchlen > 0 && wchlen != 0xFFFD)
     {
         wstring wstr(wchlen, 0);
-        MultiByteToWideChar(CP_ACP, 0, data, datsSize, &wstr[0], wchlen);
+        MultiByteToWideChar(CP_ACP, 0, data, realSize, &wstr[0], wchlen);
         text = u16string(wstr.begin(), wstr.end());
     }
     return text;
