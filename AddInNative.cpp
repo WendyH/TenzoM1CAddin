@@ -34,6 +34,7 @@ static const array<u16string, CAddInNative::ePropLast> osProps =
 	u"Scale2",
 	u"Calm",
 	u"Overload",
+	u"RiseExternalEvent",
 	u"Error",
 	u"ErrorCode",
 	u"Emulate",
@@ -56,6 +57,7 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 	u"ВторойДатчик",
 	u"ВесСтабилен",
 	u"Перегрузка",
+	u"ГенерироватьВнешнееСобытие",
 	u"Ошибка",
 	u"КодОшибки",
 	u"РежимЭмуляции",
@@ -354,6 +356,12 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			TV_BOOL(pvarPropVal) = tenzom.Calm;
 			return true;
 		}
+		case ePropRiseExternalEvent:
+		{
+			TV_VT(pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = RiseExternalEvent;
+			return true;
+		}
 		case ePropError:
 		{
 			SetPropString(pvarPropVal, tenzom.Error);
@@ -462,6 +470,11 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			tenzom.Adr = TV_I1(varPropVal);
 			return true;
 		}
+		case ePropRiseExternalEvent:
+		{
+			RiseExternalEvent = TV_BOOL(varPropVal);
+			return true;
+		}
 		case ePropError:
 		{
 			tenzom.Error = GetParamString(varPropVal);
@@ -537,6 +550,7 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	case ePropWriteLog:
 	case ePropLogFile:
 	case ePropDecimalPoint:
+	case ePropRiseExternalEvent:
 		return true;
 	default:
 		return false;
@@ -727,7 +741,7 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		case eMethGetWeight:
 		{
 			auto weight = tenzom.GetWeight();
-			if (tenzom.Event)
+			if (RiseExternalEvent && tenzom.Event)
 			{
 				auto code = tenzom.GetEnteredCode();
 				ExternalEvent(u"EnteredCode", code);

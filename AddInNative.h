@@ -30,6 +30,7 @@ public:
         ePropNScal,
         ePropCalm,
         ePropOverload,
+        ePropRiseExternalEvent,
         ePropError,
         ePropErrorCode,
         ePropEmulate,
@@ -108,6 +109,8 @@ private:
     IMemoryManager     *m_iMemory;
 
     TenzoM tenzom;
+
+    bool RiseExternalEvent;
 };
 
 #endif //__ADDINNATIVE_H__
