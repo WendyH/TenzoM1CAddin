@@ -58,6 +58,7 @@ public:
         eMethGetDeviceInfo,
         eMethGetPorts,
         eMethVersion,
+        eMethGetIP,
         eMethLast      // Always last
     };
 
@@ -101,6 +102,7 @@ private:
     long FindName(array<u16string, N>, const WCHAR_T* name);
     void CatchedException(exception_ptr eptr, u16string funcName);
     bool ExternalEvent(u16string message, u16string data);
+    u16string GetOwnIP(bool all);
 
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> u16Convert;
 

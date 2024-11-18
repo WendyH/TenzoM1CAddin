@@ -83,6 +83,7 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 	u"GetDeviceInfo",
 	u"GetPorts",
 	u"Version",
+	u"GetIP"
 };
 static const array<u16string, CAddInNative::eMethLast> osMethods_ru = 
 { 
@@ -99,7 +100,8 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"Тара",
 	u"ИнформацияОбУстройстве",
 	u"ПолучитьДоступныеПорты",
-	u"Версия"
+	u"Версия",
+	u"ПолучитьIP"
 };
 
 uint32_t convToShortWchar   (WCHAR_T** Dest, const wchar_t* Source, uint32_t len = 0);
@@ -629,6 +631,7 @@ long CAddInNative::GetNParams(const long lMethodNum)
 	case eMethGetIndicatorText: return 1;
 	case eMethSetIndicatorText: return 2;
 	case eMethSetInputChannel : return 1;
+	case eMethGetIP           : return 1;
 	default: return 0;
 	}
 
@@ -640,6 +643,16 @@ bool CAddInNative::GetParamDefValue(const long lMethodNum, const long lParamNum,
 	try
 	{
 		TV_VT(pvarParamDefValue) = VTYPE_EMPTY;
+		switch (lMethodNum)
+		{
+		case eMethGetIP:
+		{
+			TV_BOOL(pvarParamDefValue) = VTYPE_BOOL;
+			return true;
+		}
+		default:
+			return false;
+		}
 	}
 	catch (...) { CatchedException(current_exception(), u"GetParamDefValue"); }
 
@@ -660,6 +673,7 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 		case eMethGetDeviceInfo:
 		case eMethGetPorts:
 		case eMethVersion:
+		case eMethGetIP:
 			return true;
 		default:
 			return false;
@@ -765,6 +779,12 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		case eMethGetDeviceInfo:
 		{
 			SetPropString(pvarRetValue, tenzom.Version());
+			return true;
+		}
+		case eMethGetIP:
+		{
+			bool all = paParams[0].bVal;
+			SetPropString(pvarRetValue, GetOwnIP(all));
 			return true;
 		}
 		default:
@@ -1012,4 +1032,46 @@ bool CAddInNative::ExternalEvent(u16string what, u16string data)
 
 
 	return false;
+}
+
+u16string CAddInNative::GetOwnIP(bool all)
+{
+	string ips = "";
+#ifdef ISWINDOWS
+	WSADATA wsaData;
+	if (!WSAStartup(MAKEWORD(2, 2), &wsaData))
+	{
+#endif
+		char chInfo[64];
+		if (!gethostname(chInfo, sizeof(chInfo)))
+		{
+			struct hostent* sh;
+			sh = gethostbyname((char*)&chInfo);
+			if (sh != NULL)
+			{
+				int nAdapter = 0;
+				while (sh->h_addr_list[nAdapter])
+				{
+					struct sockaddr_in adr;
+					memcpy(&adr.sin_addr, sh->h_addr_list[nAdapter], sh->h_length);
+					string ip = string(inet_ntoa(adr.sin_addr));
+					if (all)
+					{
+						if (ips != "") ips += "\n";
+						ips += ip;
+					}
+					else
+					{
+						ips = ip;
+					}
+					nAdapter++;
+				}
+			}
+		}
+#ifdef ISWINDOWS
+	}
+	WSACleanup();
+#endif
+
+	return u16string(ips.begin(), ips.end());
 }
