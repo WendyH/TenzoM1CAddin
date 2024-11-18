@@ -73,6 +73,7 @@ private:
 	void CheckLastError();
 	void Log(u16string txt, char* buf, int i);
 	void Log(u16string txt);
+	void SendKey(unsigned short keycode);
 
 public:
 	enum ProtocolType
@@ -106,6 +107,9 @@ public:
 	bool Emulate  = false; // Режим эмуляции
 	bool NetMode  = false; // Режим работы по TCP/IP вместо COM-порта
 	char DecimalPoint = '.';
+
+	bool SendKeys   = false; // Cобытие нажатия на нумпаде терминала посылает в систему нажатие клавиши
+	bool NumpadKeys = false; // При посылке нажатия кнопок - использовать цифры нумпада клавиатуры
 
 	int  EmulMinKg = 9;    // Минимальный вес в килограммах при эмуляции веса
 	int  EmulMaxKg = 80;   // Минимальный вес в килограммах при эмуляции веса

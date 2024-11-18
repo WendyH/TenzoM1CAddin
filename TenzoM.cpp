@@ -2,6 +2,7 @@
 #else
 #include <WinSock2.h>
 #include <WS2tcpip.h>
+#include <winuser.h>
 #endif
 
 #include "TenzoM.h"
@@ -23,6 +24,7 @@
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
+#pragma comment (lib, "user32.lib")
 #endif
 
 #ifdef ISWINDOWS
@@ -34,6 +36,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <string.h>
+#include <linux/uinput.h>
 #endif
 
 using namespace std;
@@ -874,6 +877,52 @@ void TenzoM::Log(u16string logMsg)
     Log(logMsg, nullptr, 0);
 }
 
+#if defined(__linux)
+void send_event(const int type, const int code, const int value)
+{
+    struct input_event e;
+    memset(&e, 0, sizeof(e));
+    
+    gettimeofday(&e.time, nullptr);
+    
+    e.type = type;
+    e.code = code;
+    e.value = value;
+
+    int fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (fd >= 0)
+    {
+        write(fd, &e, sizeof(e));
+    }
+
+    if (fd >= 0)
+    {
+        ioctl(fd, UI_DEV_DESTROY);
+        close(fd);
+        fd = 0;
+    }
+}
+#endif
+
+void TenzoM::SendKey(unsigned short keycode)
+{
+#if defined(_WIN64) || defined(_WIN32)
+    INPUT ip;
+    ip.type = INPUT_KEYBOARD;
+    ip.ki.wVk = keycode;
+    ip.ki.wScan = 0;
+    ip.ki.time = 0;
+    ip.ki.dwExtraInfo = 0;
+    ip.ki.dwFlags = 0;
+    SendInput(1, &ip, sizeof(INPUT));
+
+#elif defined(__linux)
+    send_event(EV_KEY, keycode, false);
+    send_event(EV_KEY, keycode, 0);
+    send_event(EV_SYN, SYN_REPORT, 0);
+#endif
+}
+
 template<typename TInputIter>
 string make_hex_string(TInputIter first, TInputIter last, bool use_uppercase = true, bool insert_spaces = false)
 {
@@ -1215,20 +1264,19 @@ u16string TenzoM::GetEnteredCode()
                     const char event = data[0];
                     switch (event)
                     {
-                    case '\xF1': s = "1"; break;
-                    case '\xF2': s = "2"; break;
-                    case '\xF3': s = "3"; break;
-                    case '\xF4': s = "4"; break;
-                    case '\xF5': s = "5"; break;
-                    case '\xF6': s = "6"; break;
-                    case '\xF7': s = "7"; break;
-                    case '\xF8': s = "8"; break;
-                    case '\xF9': s = "9"; break;
-                    case '\x30': s = "0"; break;
+                    case '\x30': s = "0" ; break;
+                    case '\xF1': s = "1" ; break;
+                    case '\xF2': s = "2" ; break;
+                    case '\xF3': s = "3" ; break;
+                    case '\xF4': s = "4" ; break;
+                    case '\xF5': s = "5" ; break;
+                    case '\xF6': s = "6" ; break;
+                    case '\xF7': s = "7" ; break;
+                    case '\xF8': s = "8" ; break;
+                    case '\xF9': s = "9" ; break;
                     case '\x31': s = "\n"; break;
                     default: break;
                     }
-
                 }
                 char msg1[] = { '\xFF', Adr, '\xD2', '\x00', '\x00', '\xFF', '\xFF' };
                 SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
@@ -1239,6 +1287,17 @@ u16string TenzoM::GetEnteredCode()
 
             }
         }
+    }
+
+    // Если включена отсылка в систему нажатия клавиш и есть что посылать
+    if (s.length() > 0 && SendKeys)
+    {
+        unsigned short keycode = s[0];
+        if (NumpadKeys && (keycode >= 0x30) && (keycode <= 0x39))
+        {
+            keycode += 0x30;
+        }   
+        SendKey(keycode);
     }
 
     return u16string(s.begin(), s.end());

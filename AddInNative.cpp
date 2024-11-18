@@ -2,6 +2,9 @@
 #include "stdafx.h"
 #else
 #include <iconv.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 #endif
 
 #define CE_SERIAL_IMPLEMENTATION
@@ -35,6 +38,8 @@ static const array<u16string, CAddInNative::ePropLast> osProps =
 	u"Calm",
 	u"Overload",
 	u"RiseExternalEvent",
+	u"SendKeys",
+	u"NumpadKeys",
 	u"Error",
 	u"ErrorCode",
 	u"Emulate",
@@ -58,6 +63,8 @@ static const array<u16string, CAddInNative::ePropLast> osProps_ru =
 	u"ВесСтабилен",
 	u"Перегрузка",
 	u"ГенерироватьВнешнееСобытие",
+	u"ПосылатьНажатиеКлавиш",
+	u"КлавишиНумпадаКлавиатуры",
 	u"Ошибка",
 	u"КодОшибки",
 	u"РежимЭмуляции",
@@ -364,6 +371,18 @@ bool CAddInNative::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
 			TV_BOOL(pvarPropVal) = RiseExternalEvent;
 			return true;
 		}
+		case ePropSendKeys:
+		{
+			TV_VT(pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = tenzom.SendKeys;
+			return true;
+		}
+		case ePropNumpadKeys:
+		{
+			TV_VT(pvarPropVal) = VTYPE_BOOL;
+			TV_BOOL(pvarPropVal) = tenzom.NumpadKeys;
+			return true;
+		}
 		case ePropError:
 		{
 			SetPropString(pvarPropVal, tenzom.Error);
@@ -477,6 +496,16 @@ bool CAddInNative::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			RiseExternalEvent = TV_BOOL(varPropVal);
 			return true;
 		}
+		case ePropSendKeys:
+		{
+			tenzom.SendKeys = TV_BOOL(varPropVal);
+			return true;
+		}
+		case ePropNumpadKeys:
+		{
+			tenzom.NumpadKeys = TV_BOOL(varPropVal);
+			return true;
+		}
 		case ePropError:
 		{
 			tenzom.Error = GetParamString(varPropVal);
@@ -553,6 +582,8 @@ bool CAddInNative::IsPropWritable(const long lPropNum)
 	case ePropLogFile:
 	case ePropDecimalPoint:
 	case ePropRiseExternalEvent:
+	case ePropSendKeys:
+	case ePropNumpadKeys:
 		return true;
 	default:
 		return false;

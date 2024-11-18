@@ -31,6 +31,8 @@ public:
         ePropCalm,
         ePropOverload,
         ePropRiseExternalEvent,
+        ePropSendKeys,
+        ePropNumpadKeys,
         ePropError,
         ePropErrorCode,
         ePropEmulate,

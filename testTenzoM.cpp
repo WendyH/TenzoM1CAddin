@@ -14,26 +14,9 @@
 
 using namespace std;
 
-void Test()
-{
-}
-
 int main(int argc, char** argv)
 {
 	setlocale(LC_ALL, "ru-RU.UTF-8");
-
-	INPUT ip;
-	ip.type = INPUT_KEYBOARD;
-	ip.ki.wScan = 0; // hardware scan code for key
-	ip.ki.time = 0;
-	ip.ki.dwExtraInfo = 0;
-
-	// Press the "A" key
-	ip.ki.wVk = 0x30; // virtual-key code for the "a" key
-	ip.ki.dwFlags = 0; // 0 for key press
-	SendInput(1, &ip, sizeof(INPUT));
-
-	//Test();
 
 	wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> UTF8Convert;
 
