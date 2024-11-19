@@ -545,7 +545,7 @@ bool TenzoM::FindTenzoMPacket(long bytesRead, char command, char*& data, long& d
                 cop = readBuffer[offsetBegin + 2];
                 if (adr == 0)
                 {
-                    adr = readBuffer[offsetBegin + 2] + (readBuffer[offsetBegin + 3] * 256) + (readBuffer[offsetBegin + 4] * 65536);
+                    adr = (unsigned char)readBuffer[offsetBegin + 2] | (unsigned short)(readBuffer[offsetBegin + 3] << 8) | (unsigned long)(readBuffer[offsetBegin + 4] << 16);
                     cop = readBuffer[offsetBegin + 5];
                     offsetBegin += 6; // Фокусируемся начале данных (байт после адреса)
                 }
@@ -907,14 +907,13 @@ void send_event(const int type, const int code, const int value)
 void TenzoM::SendKey(unsigned short keycode)
 {
 #if defined(_WIN64) || defined(_WIN32)
-    INPUT ip;
-    ip.type = INPUT_KEYBOARD;
-    ip.ki.wVk = keycode;
-    ip.ki.wScan = 0;
-    ip.ki.time = 0;
-    ip.ki.dwExtraInfo = 0;
-    ip.ki.dwFlags = 0;
-    SendInput(1, &ip, sizeof(INPUT));
+    INPUT inputs[2] = { 0 };
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = keycode;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = keycode;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
 
 #elif defined(__linux)
     send_event(EV_KEY, keycode, false);
@@ -1083,6 +1082,22 @@ int TenzoM::GetWeight()
                 if (dataSize > 0)
                 {
                     weight = ExtractWeight(data, dataSize);
+
+                    // Если включена отсылка в систему нажатия клавиш и есть что посылать
+                    if (Event && SendKeys)
+                    {
+                        auto keycode = GetEnteredCode();
+                        if (keycode != 0)
+                        {
+                            if (NumpadKeys && (keycode >= 0x30) && (keycode <= 0x39))
+                            {
+                                keycode += 0x30;
+                            }
+                            SendKey(keycode);
+                        }
+
+                    }
+
                 }
             }
         }
@@ -1239,14 +1254,12 @@ bool TenzoM::SetIndicatorText(int line, u16string text)
 /// Запрос введенного кода
 /// </summary>
 /// <returns>Возвращается символ введённого кода ("0"..."9", Перевод строки или пустая строка)</returns>
-u16string TenzoM::GetEnteredCode()
+char TenzoM::GetEnteredCode()
 {
     long dwBytesRead = 0;
-    auto t = u16string();
-    char* lpBuf = readBuffer;
-    string s = "";
+    char code = '\x00';
 
-    if (!PortOpened()) return t;
+    if (!PortOpened()) return code;
 
     if (Protocol == eProtocolTenzoM)
     {
@@ -1264,17 +1277,17 @@ u16string TenzoM::GetEnteredCode()
                     const char event = data[0];
                     switch (event)
                     {
-                    case '\x30': s = "0" ; break;
-                    case '\xF1': s = "1" ; break;
-                    case '\xF2': s = "2" ; break;
-                    case '\xF3': s = "3" ; break;
-                    case '\xF4': s = "4" ; break;
-                    case '\xF5': s = "5" ; break;
-                    case '\xF6': s = "6" ; break;
-                    case '\xF7': s = "7" ; break;
-                    case '\xF8': s = "8" ; break;
-                    case '\xF9': s = "9" ; break;
-                    case '\x31': s = "\n"; break;
+                    case '\x30': code = '\x30'; break;
+                    case '\xF1': code = '\x31'; break;
+                    case '\xF2': code = '\x32'; break;
+                    case '\xF3': code = '\x33'; break;
+                    case '\xF4': code = '\x34'; break;
+                    case '\xF5': code = '\x35'; break;
+                    case '\xF6': code = '\x36'; break;
+                    case '\xF7': code = '\x37'; break;
+                    case '\xF8': code = '\x38'; break;
+                    case '\xF9': code = '\x39'; break;
+                    case '\x31': code = '\x0D'; break;
                     default: break;
                     }
                 }
@@ -1288,19 +1301,7 @@ u16string TenzoM::GetEnteredCode()
             }
         }
     }
-
-    // Если включена отсылка в систему нажатия клавиш и есть что посылать
-    if (s.length() > 0 && SendKeys)
-    {
-        unsigned short keycode = s[0];
-        if (NumpadKeys && (keycode >= 0x30) && (keycode <= 0x39))
-        {
-            keycode += 0x30;
-        }   
-        SendKey(keycode);
-    }
-
-    return u16string(s.begin(), s.end());
+    return code;
 }
 
 /// <summary>
@@ -1343,6 +1344,35 @@ bool TenzoM::Tare()
         }
     }
     return success;
+}
+
+int TenzoM::GetSerialNum()
+{
+    long dwBytesRead = 0;
+    int  serialNum   = 0;
+
+    if (!PortOpened()) return serialNum;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        char constexpr command = '\xA1';
+        if (SendCommand(command))
+        {
+            dwBytesRead = Receive();
+
+            if (dwBytesRead > 6)
+            {
+                char* data = readBuffer;
+                long  dataSize = 0;
+                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
+                if (dataSize > 0)
+                {
+                    serialNum = (unsigned char)data[0] | (unsigned short)(data[1] << 8) | (unsigned long)(data[2] << 16);
+                }
+            }
+        }
+    }
+    return serialNum;
 }
 
 /// <summary>

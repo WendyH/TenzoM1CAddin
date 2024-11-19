@@ -136,8 +136,10 @@ public:
 	void         SwitchToWeighing();
 	u16string    GetIndicatorText(int line);
 	bool         SetIndicatorText(int line, u16string text);
-	u16string    GetEnteredCode();
+	char         GetEnteredCode();
 	bool         SetInputChannel(int channelNum);
 	bool		 Tare();
+	bool		 Calibrate();
+	int			 GetSerialNum();
 	u16string    Version();
 };

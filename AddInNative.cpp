@@ -789,7 +789,12 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 			if (RiseExternalEvent && tenzom.Event)
 			{
 				auto code = tenzom.GetEnteredCode();
-				ExternalEvent(u"EnteredCode", code);
+				if (code != 0)
+				{
+					string s = "";
+					s += code;
+					ExternalEvent(u"EnteredCode", u16string(s.begin(), s.end()));
+				}
 			}
 			TV_VT(pvarRetValue) = VTYPE_I4;
 			TV_I4(pvarRetValue) = weight;
@@ -798,7 +803,9 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		case eMethGetGetEnteredCode:
 		{
 			auto code = tenzom.GetEnteredCode();
-			SetPropString(pvarRetValue, code);
+			string s = "";
+			if (code != 0) s += code;
+			SetPropString(pvarRetValue, u16string(s.begin(), s.end()));
 			return true;
 		}
 		case eMethGetIndicatorText:

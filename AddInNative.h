@@ -114,7 +114,7 @@ private:
 
     TenzoM tenzom;
 
-    bool RiseExternalEvent;
+    bool RiseExternalEvent = false;
 };
 
 #endif //__ADDINNATIVE_H__

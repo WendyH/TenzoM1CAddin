@@ -52,6 +52,7 @@ int main(int argc, char** argv)
 	bool success = tenzom.OpenPort(comPort, 9600, 7);
 	if (success)
 	{
+		auto sn  = tenzom.GetSerialNum();
 		auto ver = tenzom.Version();
 		printf("Version: %ls\n", ver.c_str());
 
@@ -70,7 +71,9 @@ int main(int argc, char** argv)
 			if (tenzom.Event)
 			{
 				auto code = tenzom.GetEnteredCode();
-				printf("Code: %s\n", code.c_str());
+				string s = "";
+				s += code;
+				printf("Code: %s\n", s);
 			}
 			//Sleep(100);
 		}
