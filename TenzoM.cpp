@@ -1156,7 +1156,7 @@ u16string TenzoM::GetIndicatorText(int line)
 
     if (Protocol == eProtocolTenzoM)
     {
-        char command  = '\xC6';
+        char command  = '\xC6';win
         char lineCode = '\x21';
         switch (line)
         {
@@ -1165,9 +1165,9 @@ u16string TenzoM::GetIndicatorText(int line)
         default: break;
         }
 
-        char msg1[] = { '\xFF', Adr, command, lineCode, '\x00', '\xFF', '\xFF' };
-        SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-        bool success = Send(msg1, sizeof(msg1));
+        char msg[] = { '\xFF', Adr, command, lineCode, '\x00', '\xFF', '\xFF' };
+        SetCrcOfMessage(msg, sizeof(msg)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        bool success = Send(msg, sizeof(msg));
         if (success)
         {
             dwBytesRead = Receive();
@@ -1259,8 +1259,6 @@ char TenzoM::GetEnteredCode()
     long dwBytesRead = 0;
     char code = '\x00';
 
-    if (!PortOpened()) return code;
-
     if (Protocol == eProtocolTenzoM)
     {
         char constexpr command = '\xC7';
@@ -1291,9 +1289,9 @@ char TenzoM::GetEnteredCode()
                     default: break;
                     }
                 }
-                char msg1[] = { '\xFF', Adr, '\xD2', '\x00', '\x00', '\xFF', '\xFF' };
-                SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-                if (Send(msg1, sizeof(msg1)))
+                char msg[] = { '\xFF', Adr, '\xD2', '\x00', '\x00', '\xFF', '\xFF' };
+                SetCrcOfMessage(msg, sizeof(msg));
+                if (Send(msg, sizeof(msg)))
                 {
                     dwBytesRead = Receive();
                 }
@@ -1346,12 +1344,31 @@ bool TenzoM::Tare()
     return success;
 }
 
+bool TenzoM::Calibrate()
+{
+    bool success = false;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        char constexpr command = '\xA2';
+        char msg[] = { '\xFF', Adr, '\x22', '\x00', '\x00', '\xFF', '\xFF' };
+        SetCrcOfMessage(msg, sizeof(msg));
+        if (Send(msg, sizeof(msg)))
+        {
+            if (Receive() > 4)
+            {
+                unsigned char par = readBuffer[3];
+            }
+        }
+    }
+
+    return success;
+}
+
 int TenzoM::GetSerialNum()
 {
     long dwBytesRead = 0;
     int  serialNum   = 0;
-
-    if (!PortOpened()) return serialNum;
 
     if (Protocol == eProtocolTenzoM)
     {
