@@ -87,6 +87,7 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 	u"SetIndicatorText",
 	u"SetInputChannel",
 	u"Tare",
+	u"GetSerialNum",
 	u"GetDeviceInfo",
 	u"GetPorts",
 	u"Version",
@@ -105,6 +106,7 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"УстановитьТекстИндикатора",
 	u"УстановитьВходнойКанал",
 	u"Тара",
+	u"СерийныйНомер",
 	u"ИнформацияОбУстройстве",
 	u"ПолучитьДоступныеПорты",
 	u"Версия",
@@ -701,6 +703,7 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 		case eMethGetWeight:
 		case eMethGetGetEnteredCode:
 		case eMethGetIndicatorText:
+		case eMethGetSerialNum:
 		case eMethGetDeviceInfo:
 		case eMethGetPorts:
 		case eMethVersion:
@@ -812,6 +815,13 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		{
 			int line = paParams[0].ui8Val;
 			SetPropString(pvarRetValue, tenzom.GetIndicatorText(line));
+			return true;
+		}
+		case eMethGetSerialNum:
+		{
+			int sn = tenzom.GetSerialNum();
+			TV_VT(pvarRetValue) = VTYPE_I4;
+			TV_I4(pvarRetValue) = sn;
 			return true;
 		}
 		case eMethGetDeviceInfo:

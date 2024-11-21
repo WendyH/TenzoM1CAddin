@@ -33,7 +33,7 @@ int main(int argc, char** argv)
 	tenzom.NetMode  = true;
 	tenzom.Name		= u"Весы2";
 	tenzom.Protocol = TenzoM::eProtocolTenzoM;
-	
+
 	tenzom.WriteLog = true;
 #ifdef ISWINDOWS
 	tenzom.LogFile  = u"D:\\tenzom.log";
@@ -54,14 +54,14 @@ int main(int argc, char** argv)
 	{
 		auto sn  = tenzom.GetSerialNum();
 		auto ver = tenzom.Version();
-		printf("Version: %ls\n", ver.c_str());
+		printf("SN: %d Version: %ls\n", sn, ver.c_str());
+		tenzom.Calibrate();
 
-		tenzom.SwitchToWeighing();
+		//tenzom.SwitchToWeighing();
 		auto s1 = tenzom.GetIndicatorText(0);
 		printf("Text: %ls\n", s1.c_str());
 
-		//tenzom.SetIndicatorText(0, u"Hello my friend! This is the test of text lenght");
-		//tenzom.SetIndicatorText(2, u"Привет!");
+		//tenzom.SetIndicatorText(0, u"Привет! Это проверка русского текста!             ");
 
 		for (int i = 0; i < 1; i++)
 		{

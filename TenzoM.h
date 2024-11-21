@@ -67,6 +67,7 @@ private:
 	void SetCrcOfMessage(char* buffer, long bufSize);
 	bool FindTenzoMPacket(long bytesRead, char command);
 	bool FindTenzoMPacket(long bytesRead, char command, char*& data, long& dataSize);
+	bool CheckErrorPacket(long bytesRead);
 	int  ExtractWeight(char* data, long dataSize);
 	int  RandomWeight();
 	void SetErrorText(unsigned long errorCode);

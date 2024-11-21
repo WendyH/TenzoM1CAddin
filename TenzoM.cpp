@@ -186,18 +186,18 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-        if (Protocol == eProtocol643)
-        {
-            // Приветствие весов
-            char message[] = { '\x01', '\x30', '\x30', '\x30', '\x31', '\x00' };
-            snprintf((char*)message + 1, 5, "%04d", Adr);
+    }
+    if (success && Protocol == eProtocol643)
+    {
+        // Приветствие весов
+        char message[] = { '\x01', '\x30', '\x30', '\x30', '\x31', '\x00' };
+        snprintf((char*)message + 1, 5, "%04d", Adr);
 
-            success = Send(message, sizeof(message) - 1);
-            if (success)
-            {
-                Delay(40);
-                success = Receive() > 0;
-            }
+        success = Send(message, sizeof(message) - 1);
+        if (success)
+        {
+            Delay(40);
+            success = Receive() > 0;
         }
     }
 
@@ -262,7 +262,7 @@ unsigned long TenzoM::Receive()
         if (NetMode)
         {
             dwReadBytes = recv(clientSocket, readBuffer, sizeof(readBuffer), 0);
-            bSuccess = dwReadBytes > 0;
+            bSuccess = (long)dwReadBytes > 0;
         }
         else
         {
@@ -326,7 +326,7 @@ unsigned long TenzoM::Receive()
     catch (...) {}
 
     if (!bSuccess) CheckLastError();
-    else if (dwReadBytes > 0)
+    else if ((long)dwReadBytes > 0)
     {
         Log(u"Receive", readBuffer, dwReadBytes);
     }
@@ -531,6 +531,7 @@ bool TenzoM::FindTenzoMPacket(long bytesRead, char command, char*& data, long& d
     int  offsetEnd   = 0;
     int  adr         = 0;
     char cop         = 0;
+    bool packetFound = false;
     data     = readBuffer;
     dataSize = 0;
     if (bytesRead > 5)
@@ -554,25 +555,29 @@ bool TenzoM::FindTenzoMPacket(long bytesRead, char command, char*& data, long& d
                     offsetBegin += 3; // Фокусируемся начале данных (байт после адреса)
                 }
                 if ((adr != Adr) || (cop != command)) continue; // Проверяем, наш ли это пакет
+                packetFound = true;
                 break;
             }
             prevByte = readBuffer[offsetBegin];
             offsetBegin++;
         }
-        offsetEnd = offsetBegin;
-        // Поиск конца пакета
-        while (offsetEnd < bytesRead - 1)
+        if (packetFound)
         {
-            if ((readBuffer[offsetEnd] == '\xFF') && (readBuffer[offsetEnd + 1] == '\xFF'))
+            offsetEnd = offsetBegin;
+            // Поиск конца пакета
+            while (offsetEnd < bytesRead - 1)
             {
-                offsetEnd -= 1; // Фокусируемся на смещении после данных (байт контрольного значением CRC)
-                break;
+                if ((readBuffer[offsetEnd] == '\xFF') && (readBuffer[offsetEnd + 1] == '\xFF'))
+                {
+                    offsetEnd -= 1; // Фокусируемся на смещении после данных (байт контрольного значением CRC)
+                    break;
+                }
+                offsetEnd++;
             }
-            offsetEnd++;
         }
     }
 
-    if (offsetBegin > 0) // Если был найден пакет
+    if (packetFound) // Если был найден пакет
     {
         success = true;
         if (offsetEnd > offsetBegin)
@@ -583,6 +588,32 @@ bool TenzoM::FindTenzoMPacket(long bytesRead, char command, char*& data, long& d
     }
 
     return success;
+}
+
+bool TenzoM::CheckErrorPacket(long bytesRead)
+{
+    bool found = false;
+    char* data = readBuffer;
+    long dataSize = 0;
+
+    found = FindTenzoMPacket(bytesRead, '\xEE', data, dataSize);
+    if (found)
+    {
+        LastError = data[0];
+        switch (LastError)
+        {
+        case 0x03: Error = u"Ошибка диапазона обнуления"; break;
+        case 0x04: Error = u"Изменение параметров запрещено"; break;
+        case 0x05: Error = u"Ошибка превышения длины посылки (входного буфера)"; break;
+        case 0x06: Error = u"Ошибка CRC-кода"; break;
+        case 0x20: Error = u"Внутренняя калибровка нуля АЦП не завершена"; break;
+        case 0x21: Error = u"Внутренняя калибровка шкалы АЦП не завершена"; break;
+        default:
+            Error = u"Ошибка выполнения команды"; break;
+        }
+    }
+
+    return found;
 }
 
 /// <summary>
@@ -697,6 +728,48 @@ u16string GetText(char* data, long datsSize)
             break;
         realSize++;
     }
+
+    string ss = "БГЁЖЗИЙЛПУФЧШЪЫЭЮЯбвгёжзийклмнптчшъыьэюя<>\"\"№                   ДЦЩдфцщ"; // A0...
+    string e1 = "A B  E     K MHO PCT  X      b   ";
+    string e2 = "a    e         o pc y x      b   ";
+    string r1 = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
+    string r2 = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+
+    int pos = 0; unsigned char chzam;
+    for (int i = 0; i < realSize; i++)
+    {
+        chzam = 0x00;
+        auto ch = data[i];
+        if ((unsigned char)ch > 0x40)
+        {
+            pos = (unsigned char)ch - 0xA0;
+            if ((pos >= 0) && (pos < ss.length()))
+            {
+                chzam = ss[pos];
+            }
+            else
+            {
+                pos = e1.find(ch);
+                if ((pos >= 0) && (e1[pos] != 0x20))
+                {
+                    chzam = r1[pos];
+                }
+                else
+                {
+                    pos = e2.find(ch);
+                    if ((pos >= 0) && (e2[pos] != 0x20))
+                    {
+                        chzam = r2[pos];
+                    }
+                }
+            }
+            if ((chzam != 0x00) && (chzam != 0x20))
+            {
+                data[i] = chzam;
+            }
+        }
+    }
+
 
 #ifdef ISWINDOWS
     int wchlen = MultiByteToWideChar(CP_ACP, 0, data, realSize, NULL, 0);
@@ -1000,7 +1073,7 @@ bool TenzoM::SetZero()
     }
     else if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand('\xBF'))
+        if (SendCommand('\xC0'))
         {
             success = Receive() > 0;
         }
@@ -1143,20 +1216,12 @@ void TenzoM::SwitchToWeighing()
 /// <returns>Возвращается текст индикаторов</returns>
 u16string TenzoM::GetIndicatorText(int line)
 {
-    //u16string ttt = u"Привет! Это тест русского.";
-    //return ttt;
-
     long dwBytesRead = 0;
     u16string text = u"";
-    // 43 - 31 3A 48 45 54 54 4F 20 20 4B A1 3A 20 20 20 20 20 2D 31 38
-    // 20   1  :  H  E  T  T  O        K  ?? :                 -  1  8
-    //      31 36 2F 31 31 2F 32 34 20 20 20 20 31 39 3A 30 30 3A 35 31
-    //      1  6  /  1  1  /  2  4              1  9  :  0  8  :  5  1
-    if (!PortOpened()) return text;
 
     if (Protocol == eProtocolTenzoM)
     {
-        char command  = '\xC6';win
+        char command  = '\xC6';
         char lineCode = '\x21';
         switch (line)
         {
@@ -1181,6 +1246,17 @@ u16string TenzoM::GetIndicatorText(int line)
                     long msgLen = dataSize - 2;
                     text = GetText(data+2, msgLen);
                 }
+            }
+        }
+    }
+    else if (Protocol == eProtocol643)
+    {
+        if (SendCommand('\x10'))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                text = GetText(readBuffer, dwBytesRead - 2);
             }
         }
     }
@@ -1211,11 +1287,14 @@ bool TenzoM::SetIndicatorText(int line, u16string text)
         }
 
         auto t = UTF16_to_CP1251(text);
-        //std::wstring str = wstring(text.begin(), text.end());
-        //std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
-        //std::string t = convert.to_bytes(str);
-
         auto s = t.c_str();
+ 
+        string ss = "БГЁЖЗИЙЛПУФЧШЪЫЭЮЯбвгёжзийклмнптчшъыьэюя<>\"\"№                   ДЦЩдфцщ"; // A0...
+        string e1 = "A B  E     K MHO PCT  X      b   ";
+        string e2 = "a    e         o pc y x      b   ";
+        string r1 = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
+        string r2 = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+
         int len = strlen(s);
         if (len > 50) len = 50;
 
@@ -1225,21 +1304,52 @@ bool TenzoM::SetIndicatorText(int line, u16string text)
         readBuffer[3] = lineCode;
         readBuffer[4] = len;
 
-        //readBuffer[5] = '\x7F';
-        //readBuffer[6] = '\x60';
-        //readBuffer[7] = '\x80';
-        //len = 3;
+        int pos = 0; unsigned char chzam;
         for (int i = 0; i < len; i++)
         {
-            readBuffer[5 + i] = s[i];
+            chzam = 0x00;
+            auto ch = s[i];
+            if ((unsigned char)ch > 0x40)
+            {
+                pos = ss.find(ch);
+                if (pos >= 0)
+                {
+                    chzam = 0xA0 + pos;
+                }
+                else
+                {
+                    pos = r1.find(ch);
+                    if (pos >= 0)
+                    {
+                        chzam = e1[pos];
+                    }
+                    else
+                    {
+                        pos = r2.find(ch);
+                        if (pos >= 0)
+                        {
+                            chzam = e2[pos];
+                        }
+                    }
+                }
+                if ((chzam != 0x00) && (chzam != 0x20))
+                {
+                    ch = chzam;
+                }
+            }
+            readBuffer[5 + i] = ch;
         }
         readBuffer[len + 5] = '\x00';
         readBuffer[len + 6] = '\xFF';
         readBuffer[len + 7] = '\xFF';
 
+        //for (int i = 0; i < 40; i++)
+        //{
+        //    readBuffer[5 + i] = 0xD0 + i;
+        //}
+
         int messageLen = len + 8;
 
-        //char msg1[] = { '\xFF', Adr, '\xD2', '\x21', '\x00', '\xFF', '\xFF' };
         SetCrcOfMessage(readBuffer, messageLen); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
         success = Send(readBuffer, messageLen);
         if (success)
@@ -1299,6 +1409,19 @@ char TenzoM::GetEnteredCode()
             }
         }
     }
+    else if (Protocol == eProtocol643)
+    {
+        if (SendCommand('\x11'))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 0)
+            {
+                code = readBuffer[0];
+                if (code == 0x3D) code = 0x0D;
+                SendCommand('\x19');
+            }
+        }
+    }
     return code;
 }
 
@@ -1346,18 +1469,32 @@ bool TenzoM::Tare()
 
 bool TenzoM::Calibrate()
 {
+    long dwBytesRead = 0;
     bool success = false;
 
     if (Protocol == eProtocolTenzoM)
     {
         char constexpr command = '\xA2';
-        char msg[] = { '\xFF', Adr, '\x22', '\x00', '\x00', '\xFF', '\xFF' };
+        char constexpr proc    = '\x22';
+
+        char msg[] = { '\xFF', Adr, command, proc, '\x00', '\xFF', '\xFF' };
         SetCrcOfMessage(msg, sizeof(msg));
         if (Send(msg, sizeof(msg)))
         {
-            if (Receive() > 4)
+            char* data = readBuffer;
+            long  dataSize = 0;
+            dwBytesRead = Receive();
+            if (dwBytesRead > 6)
             {
-                unsigned char par = readBuffer[3];
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
+                {
+                    char retCode = data[0];
+                    success = (retCode == proc);
+                }
+            }
+            if (!success)
+            {
+                CheckErrorPacket(dwBytesRead);
             }
         }
     }
