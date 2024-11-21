@@ -326,7 +326,7 @@ unsigned long TenzoM::Receive()
     catch (...) {}
 
     if (!bSuccess) CheckLastError();
-    else if ((long)dwReadBytes > 0)
+    else if (WriteLog && ((long)dwReadBytes > 0))
     {
         Log(u"Receive", readBuffer, dwReadBytes);
     }
@@ -381,7 +381,7 @@ bool TenzoM::Send(char* message, long msgSize)
     }
 
     if (!bSuccess) CheckLastError();
-    else if (dwBytesWritten > 0)
+    else if (WriteLog && (dwBytesWritten > 0))
     {
         Log(u"Send", message, dwBytesWritten);
     }
@@ -683,7 +683,10 @@ u16string TenzoM::GetFreeComPorts()
         {
             LastError = 2;
             Error = p.generic_u16string() + u" does not exist";
-            Log(u"Error " + Error);
+            if (WriteLog)
+            {
+                Log(u"Error " + Error);
+            }
         }
         else
         {
@@ -918,7 +921,7 @@ void TenzoM::SetErrorText(unsigned long errorCode)
 #endif
         }
         }
-        if (LastError)
+        if (WriteLog && LastError)
         {
             Log(u"Error: " + Error);
         }
@@ -1009,6 +1012,11 @@ string make_hex_string(TInputIter first, TInputIter last, bool use_uppercase = t
             ss << " ";
     }
     return ss.str();
+}
+
+u16string to_u16string(int const& i) {
+    wstring_convert<codecvt_utf8_utf16<char16_t, 0x10ffff, little_endian>, char16_t> conv;
+    return conv.from_bytes(to_string(i));
 }
 
 void TenzoM::Log(u16string logMsg, char* buf, int buflen)
@@ -1176,7 +1184,10 @@ int TenzoM::GetWeight()
         }
     }
 
-    Log((u16string)(u"Ves: " + (char16_t)weight) + u" Calm: " + (Calm ? u"1" : u"0"));
+    if (WriteLog)
+    {
+        Log((u16string)(u"Ves: " + to_u16string(weight) + u" Calm: " + (Calm ? u"1" : u"0")));
+    }
 
     return weight;
 }
