@@ -125,12 +125,11 @@ public:
 	unsigned char GetStatus();
 	bool          SetZero();
 	int           GetWeight();
-	void          SwitchToWeighing();
-	u16string     GetIndicatorText(int line);
-	bool          SetIndicatorText(int line, u16string text);
+	bool          SwitchToWeighing();
+	u16string     GetIndicatorText(char num);
+	bool          SetIndicatorText(u16string text, char num);
 	char          GetEnteredCode();
 	bool          SetInputChannel(int channelNum);
-	bool		  Tare();
 	bool		  Calibrate();
 	int			  GetSerialNum();
 	u16string     Version();

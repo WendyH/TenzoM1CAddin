@@ -86,7 +86,6 @@ static const array<u16string, CAddInNative::eMethLast> osMethods =
 	u"GetIndicatorText",
 	u"SetIndicatorText",
 	u"SetInputChannel",
-	u"Tare",
 	u"GetSerialNum",
 	u"GetDeviceInfo",
 	u"GetPorts",
@@ -105,7 +104,6 @@ static const array<u16string, CAddInNative::eMethLast> osMethods_ru =
 	u"ПолучитьТекстИндикатора",
 	u"УстановитьТекстИндикатора",
 	u"УстановитьВходнойКанал",
-	u"Тара",
 	u"СерийныйНомер",
 	u"ИнформацияОбУстройстве",
 	u"ПолучитьДоступныеПорты",
@@ -680,7 +678,26 @@ bool CAddInNative::GetParamDefValue(const long lMethodNum, const long lParamNum,
 		{
 		case eMethGetIP:
 		{
-			TV_BOOL(pvarParamDefValue) = VTYPE_BOOL;
+			TV_VT  (pvarParamDefValue) = VTYPE_BOOL;
+			TV_BOOL(pvarParamDefValue) = false;
+			return true;
+		}
+		case eMethGetIndicatorText:
+		{
+			if (lParamNum == 1)
+			{
+				TV_VT(pvarParamDefValue) = VTYPE_I4;
+				TV_I4(pvarParamDefValue) = 0;
+			}
+			return true;
+		}
+		case eMethSetIndicatorText:
+		{
+			if (lParamNum == 2)
+			{
+				TV_VT(pvarParamDefValue) = VTYPE_I4;
+				TV_I4(pvarParamDefValue) = 0;
+			}
 			return true;
 		}
 		default:
@@ -740,9 +757,9 @@ bool CAddInNative::CallAsProc(const long lMethodNum, tVariant* paParams, const l
 			return true;
 		case eMethSetIndicatorText:
 		{
-			const int       line = paParams[0].ui8Val;
-			const u16string text = GetParamString(&paParams[1]);
-			tenzom.SetIndicatorText(line, text);
+			const u16string text = GetParamString(&paParams[0]);
+			const int       line = paParams[1].ui8Val;
+			tenzom.SetIndicatorText(text, line);
 			return true;
 		}
 		case eMethSwitchToWeighing:
@@ -754,9 +771,6 @@ bool CAddInNative::CallAsProc(const long lMethodNum, tVariant* paParams, const l
 			tenzom.SetInputChannel(channelNum);
 			return true;
 		}
-		case eMethTare:
-			tenzom.Tare();
-			return true;
 		case eMethVersion:
 			break;
 		default:

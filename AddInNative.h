@@ -56,7 +56,6 @@ public:
         eMethGetIndicatorText,
         eMethSetIndicatorText,
         eMethSetInputChannel,
-        eMethTare,
         eMethGetSerialNum,
         eMethGetDeviceInfo,
         eMethGetPorts,

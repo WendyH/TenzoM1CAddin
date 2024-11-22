@@ -70,7 +70,6 @@ bool TenzoM::TryConnectTo()
 
                 if (clientSocket != INVALID_SOCKET)
                 {
-                    int optval = 1;
                     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char*)&tcpTimeout, sizeof(tcpTimeout));
                     err = connect(clientSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
                     if (!err) {
@@ -1071,6 +1070,10 @@ void TenzoM::Log(u16string logMsg, char* buf, int buflen)
 
 #pragma region РаботаСВесами
 
+/// <summary>
+/// Получение байта с побитовыми флагами состояния устройства
+/// </summary>
+/// <returns>Возвращает байт STATUS (значение битов смотреть в документации к устройству)</returns>
 unsigned char TenzoM::GetStatus()
 {
     unsigned char status = 0x00;
@@ -1089,25 +1092,6 @@ unsigned char TenzoM::GetStatus()
                 if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
                     status = data[0];
-
-                    Event     = (status | 0x10);
-                    Calm      = (status | 0x04);
-
-                    // Если включена отсылка в систему нажатия клавиш и есть что посылать
-                    if (Event && SendKeys)
-                    {
-                        auto keycode = GetEnteredCode();
-                        if (keycode != 0)
-                        {
-                            if (NumpadKeys && (keycode >= 0x30) && (keycode <= 0x39))
-                            {
-                                keycode += 0x30;
-                            }
-                            SendKey(keycode);
-                        }
-
-                    }
-
                 }
                 else
                 {
@@ -1126,6 +1110,7 @@ unsigned char TenzoM::GetStatus()
 bool TenzoM::SetZero()
 {
     bool success = false;
+    long dwBytesRead = 0;
 
     if (Protocol == eProtocol643)
     {
@@ -1136,9 +1121,22 @@ bool TenzoM::SetZero()
     }
     else if (Protocol == eProtocolTenzoM)
     {
-        if (SendCommand('\xC0'))
+        constexpr char command = '\xC0';
+        if (SendCommand(command))
         {
-            success = Receive() > 0;
+            dwBytesRead = Receive();
+            if (dwBytesRead > 0)
+            {
+                if (FindTenzoMPacket(dwBytesRead, command))
+                {
+                    success = true;
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
+                }
+            }
+
         }
     }
 
@@ -1163,7 +1161,6 @@ int TenzoM::GetWeight()
         if (SendCommand('\x10'))
         {
             dwBytesRead = Receive();
-
             if (dwBytesRead > 8)
             {
                 // поиск последнего символа '=' в полученной последовательности
@@ -1214,8 +1211,7 @@ int TenzoM::GetWeight()
             {
                 char* data = readBuffer;
                 long  dataSize = 0;
-                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
-                if (dataSize > 0)
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
                     weight = ExtractWeight(data, dataSize);
 
@@ -1233,7 +1229,10 @@ int TenzoM::GetWeight()
                         }
 
                     }
-
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
                 }
             }
         }
@@ -1250,37 +1249,61 @@ int TenzoM::GetWeight()
 /// <summary>
 /// Переключить в режим взвешивания
 /// </summary>
-void TenzoM::SwitchToWeighing()
+bool TenzoM::SwitchToWeighing()
 {
+    bool success = false;
+    long dwBytesRead = 0;
+
     switch (Protocol)
     {
     case TenzoM::eProtocolTenzoM:
     {
         if (SendCommand('\xCD'))
         {
-            Receive();
+            success = Receive() > 0;
         }
         break;
     }
     case TenzoM::eProtocol643:
     {
-        if (SendCommand('\x18'))
+        constexpr char command = '\xC3';
+        if (SendCommand(command))
         {
-            Receive();
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                if (FindTenzoMPacket(dwBytesRead, command))
+                {
+                    success = true;
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
+                }
+            }
         }
         break;
     }
     default:
         break;
     }
+
+    return success;
 }
 
 /// <summary>
 /// Получить значение индикаторов (высвечивающегося текста)
 /// </summary>
-/// <param name="line">0 - обе строки, 1 - верзняя строка, 2 - нижняя строка</param>
+/// <param name="num">NUM - Номер устройства (описывается дополнительно для каждого устройства.
+/// 0x01 - основной семисегментный индикатор (ТВ-003, ТВ-009);
+/// 0x02 - дополнительный семисегментный индикатор (ТВ-003, ТВ-009);
+/// 0x0F – индикатор ТВ-015
+/// 0x1F - верхняя строка индикатора (ТВ-014, ТВ-015, ТВ-019);
+/// 0x20 - нижняя строка индикатора (ТВ-015, ТВ-019);
+/// 0x21 - нижняя и верхняя строка индикатора (ТВ-015, ТВ-019);
+/// </param>
 /// <returns>Возвращается текст индикаторов</returns>
-u16string TenzoM::GetIndicatorText(int line)
+u16string TenzoM::GetIndicatorText(char num = 0)
 {
     long dwBytesRead = 0;
     u16string text = u"";
@@ -1288,15 +1311,15 @@ u16string TenzoM::GetIndicatorText(int line)
     if (Protocol == eProtocolTenzoM)
     {
         char command  = '\xC6';
-        char lineCode = '\x21';
-        switch (line)
-        {
-        case 1: lineCode = '\x1F'; break;
-        case 2: lineCode = '\x20'; break;
-        default: break;
-        }
+        //char lineCode = '\x21';
+        //switch (line)
+        //{
+        //case 1: lineCode = '\x1F'; break;
+        //case 2: lineCode = '\x20'; break;
+        //default: break;
+        //}
 
-        char msg[] = { '\xFF', Adr, command, lineCode, '\x00', '\xFF', '\xFF' };
+        char msg[] = { '\xFF', Adr, command, num, '\x00', '\xFF', '\xFF' };
         SetCrcOfMessage(msg, sizeof(msg)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
         bool success = Send(msg, sizeof(msg));
         if (success)
@@ -1306,11 +1329,14 @@ u16string TenzoM::GetIndicatorText(int line)
             {
                 char* data = readBuffer;
                 long  dataSize = 0;
-                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
-                if (dataSize > 0)
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
                     long msgLen = dataSize - 2;
                     text = GetText(data+2, msgLen);
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
                 }
             }
         }
@@ -1333,24 +1359,25 @@ u16string TenzoM::GetIndicatorText(int line)
 /// <summary>
 /// Вывести символьное сообщение на устройство отображения или вывода
 /// </summary>
-/// <param name="line">0 - на все строки, 1 = верхняя строка, 2 - нижняя строка</param>
 /// <param name="text">Текст, выводимый на индикаторы</param>
+/// <param name="num"></param>
 /// <returns>Возвращает true, если передача прошла успешно</returns>
-bool TenzoM::SetIndicatorText(int line, u16string text)
+bool TenzoM::SetIndicatorText(u16string text, char num = 0)
 {
     bool success = false;
     long dwBytesRead = 0;
 
     if (Protocol == eProtocolTenzoM)
     {
-        char lineCode = '\x22';
-        switch (line)
-        {
-        case 1: lineCode = '\x21'; break;
-        case 2: lineCode = '\x20'; break;
-        default:
-            break;
-        }
+        char command  = '\xD2';
+        //char lineCode = '\x22';
+        //switch (line)
+        //{
+        //case 1: lineCode = '\x21'; break;
+        //case 2: lineCode = '\x20'; break;
+        //default:
+        //    break;
+        //}
 
         auto t = UTF16_to_CP1251(text);
         auto s = t.c_str();
@@ -1366,8 +1393,8 @@ bool TenzoM::SetIndicatorText(int line, u16string text)
 
         readBuffer[0] = '\xFF';
         readBuffer[1] = Adr;
-        readBuffer[2] = '\xD2';
-        readBuffer[3] = lineCode;
+        readBuffer[2] = command;
+        readBuffer[3] = num;
         readBuffer[4] = len;
 
         int pos = 0; unsigned char chzam;
@@ -1417,10 +1444,20 @@ bool TenzoM::SetIndicatorText(int line, u16string text)
         int messageLen = len + 8;
 
         SetCrcOfMessage(readBuffer, messageLen); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-        success = Send(readBuffer, messageLen);
-        if (success)
+        if (Send(readBuffer, messageLen))
         {
             dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                if (FindTenzoMPacket(dwBytesRead, command))
+                {
+                    success = true;
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
+                }
+            }
         }
     }
     return success;
@@ -1445,8 +1482,7 @@ char TenzoM::GetEnteredCode()
             {
                 char* data = readBuffer;
                 long  dataSize = 0;
-                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
-                if (dataSize > 0)
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
                     const char event = data[0];
                     switch (event)
@@ -1464,14 +1500,20 @@ char TenzoM::GetEnteredCode()
                     case '\x31': code = '\x0D'; break;
                     default: break;
                     }
-                }
-                char msg[] = { '\xFF', Adr, '\xD2', '\x00', '\x00', '\xFF', '\xFF' };
-                SetCrcOfMessage(msg, sizeof(msg));
-                if (Send(msg, sizeof(msg)))
-                {
-                    dwBytesRead = Receive();
-                }
 
+                    // Сброс состояния нажатой клавиши
+                    char msg[] = { '\xFF', Adr, '\xD2', '\x00', '\x00', '\xFF', '\xFF' };
+                    SetCrcOfMessage(msg, sizeof(msg));
+                    if (Send(msg, sizeof(msg)))
+                    {
+                        dwBytesRead = Receive();
+                    }
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
+                }
+                Event = false;
             }
         }
     }
@@ -1485,6 +1527,7 @@ char TenzoM::GetEnteredCode()
                 code = readBuffer[0];
                 if (code == 0x3D) code = 0x0D;
                 SendCommand('\x19');
+                Event = false;
             }
         }
     }
@@ -1504,30 +1547,22 @@ bool TenzoM::SetInputChannel(int channelNum)
 
     if (Protocol == eProtocolTenzoM)
     {
-        char msg1[] = { '\xFF', Adr, '\xDC', char(channelNum), '\x00', '\xFF', '\xFF'};
+        char constexpr command = '\xDC';
+        char msg1[] = { '\xFF', Adr, command, char(channelNum), '\x00', '\xFF', '\xFF'};
         SetCrcOfMessage(msg1, sizeof(msg1));
-        success = Send(msg1, sizeof(msg1));
-        if (success)
+        if (Send(msg1, sizeof(msg1)))
         {
-            dwBytesRead = Receive();
-        }
-    }
-    return success;
-}
-
-/// <summary>
-/// Компенсировать вес тары:
-/// (Команда, эквивалентная нажатию кнопки «>Т<»)
-/// </summary>
-/// <returns>Возвращает true, если передача команды прошла успешно</returns>
-bool TenzoM::Tare()
-{
-    bool success = false;
-    if (Protocol == eProtocolTenzoM)
-    {
-        if (SendCommand('\xCE'))
-        {
-            success = Receive() > 0;
+            if (Receive() > 0)
+            {
+                if (FindTenzoMPacket(dwBytesRead, command))
+                {
+                    success = true;
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
+                }
+            }
         }
     }
     return success;
@@ -1540,22 +1575,26 @@ bool TenzoM::Calibrate()
 
     if (Protocol == eProtocolTenzoM)
     {
-        char constexpr command = '\xA2';
-        char constexpr proc    = '\x22';
+        constexpr char command = '\xA2';
+        constexpr char proc    = '\x22';
 
         char msg[] = { '\xFF', Adr, command, proc, '\x00', '\xFF', '\xFF' };
         SetCrcOfMessage(msg, sizeof(msg));
         if (Send(msg, sizeof(msg)))
         {
-            char* data = readBuffer;
-            long  dataSize = 0;
             dwBytesRead = Receive();
             if (dwBytesRead > 6)
             {
+                char* data = readBuffer;
+                long  dataSize = 0;
                 if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
                     char retCode = data[0];
                     success = (retCode == proc);
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
                 }
             }
             if (!success)
@@ -1584,10 +1623,16 @@ int TenzoM::GetSerialNum()
             {
                 char* data = readBuffer;
                 long  dataSize = 0;
-                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
-                if (dataSize > 0)
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
-                    serialNum = (unsigned char)data[0] | (unsigned short)(data[1] << 8) | (unsigned long)(data[2] << 16);
+                    if (dataSize > 2)
+                    {
+                        serialNum = (unsigned char)data[0] | (unsigned short)(data[1] << 8) | (unsigned long)(data[2] << 16);
+                    }
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
                 }
             }
         }
@@ -1613,10 +1658,13 @@ u16string TenzoM::Version()
             {
                 char* data = readBuffer;
                 long  dataSize = 0;
-                FindTenzoMPacket(dwBytesRead, command, data, dataSize);
-                if (dataSize > 0)
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
                 {
                     text = GetText(data, dataSize);
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
                 }
             }
         }
