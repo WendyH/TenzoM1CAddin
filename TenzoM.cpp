@@ -998,6 +998,12 @@ void TenzoM::SendKey(unsigned short keycode)
 #endif
 }
 
+void TenzoM::SetUnsupportedComadrError()
+{
+    Error = u"Команда не поддерживается устройством";
+    LastError = 0x01;
+}
+
 template<typename TInputIter>
 string make_hex_string(TInputIter first, TInputIter last, bool use_uppercase = true, bool insert_spaces = false)
 {
@@ -1064,6 +1070,55 @@ void TenzoM::Log(u16string logMsg, char* buf, int buflen)
 #pragma endregion
 
 #pragma region РаботаСВесами
+
+unsigned char TenzoM::GetStatus()
+{
+    unsigned char status = 0x00;
+    long dwBytesRead = 0;
+
+    if (Protocol == eProtocolTenzoM)
+    {
+        constexpr char command = '\xBF';
+        if (SendCommand(command))
+        {
+            dwBytesRead = Receive();
+            if (dwBytesRead > 8)
+            {
+                char* data = readBuffer;
+                long  dataSize = 0;
+                if (FindTenzoMPacket(dwBytesRead, command, data, dataSize))
+                {
+                    status = data[0];
+
+                    Event     = (status | 0x10);
+                    Calm      = (status | 0x04);
+
+                    // Если включена отсылка в систему нажатия клавиш и есть что посылать
+                    if (Event && SendKeys)
+                    {
+                        auto keycode = GetEnteredCode();
+                        if (keycode != 0)
+                        {
+                            if (NumpadKeys && (keycode >= 0x30) && (keycode <= 0x39))
+                            {
+                                keycode += 0x30;
+                            }
+                            SendKey(keycode);
+                        }
+
+                    }
+
+                }
+                else
+                {
+                    SetUnsupportedComadrError();
+                }
+            }
+        }
+    }
+
+    return status;
+}
 
 /// <summary>
 /// Обнулить показания веса

@@ -55,7 +55,7 @@ int main(int argc, char** argv)
 		auto sn  = tenzom.GetSerialNum();
 		auto ver = tenzom.Version();
 		printf("SN: %d Version: %ls\n", sn, ver.c_str());
-		tenzom.Calibrate();
+		auto status = tenzom.GetStatus();
 
 		//tenzom.SwitchToWeighing();
 		auto s1 = tenzom.GetIndicatorText(0);

@@ -20,17 +20,6 @@ using namespace std;
 #define RECV_BUFFER_LENGHT 1024 * 4 // bytes
 #define TCP_TIMEOUT_SEC    2
 
-struct TenzoMSTATUS {
-	bool Reset;
-	bool Error;
-	bool Netto;
-	bool KeyPressed;
-	bool EndDosing;
-	bool WeightFixed;
-	bool ADCCalibration;
-	bool Dosing;
-};
-
 class TenzoM
 {
 private:
@@ -75,6 +64,7 @@ private:
 	void Log(u16string txt, char* buf, int i);
 	void Log(u16string txt);
 	void SendKey(unsigned short keycode);
+	void SetUnsupportedComadrError();
 
 public:
 	enum ProtocolType
@@ -97,8 +87,8 @@ public:
 		ClosePort();
 	}
 
-	u16string    Name      = u"";
-	ProtocolType Protocol  = eProtocolTenzoM; // Протокол обмена с весами
+	u16string    Name = u"";
+	ProtocolType Protocol = eProtocolTenzoM; // Протокол обмена с весами
 	char Adr   = 1;     // Адрес устройства
 	bool NScal = false; // Флаг использования второго тезнодатчика
 	bool Event = false; // Флаг присутствия события (введён код с клиавиатуры)
@@ -107,6 +97,7 @@ public:
 	bool Overload = false; // Флаг перегрузки
 	bool Emulate  = false; // Режим эмуляции
 	bool NetMode  = false; // Режим работы по TCP/IP вместо COM-порта
+
 	char DecimalPoint = '.';
 
 	bool SendKeys   = false; // Cобытие нажатия на нумпаде терминала посылает в систему нажатие клавиши
@@ -131,16 +122,16 @@ public:
 
 	u16string    GetFreeComPorts();
 
-	TenzoMSTATUS GetStatus();
-	bool         SetZero();
-	int          GetWeight();
-	void         SwitchToWeighing();
-	u16string    GetIndicatorText(int line);
-	bool         SetIndicatorText(int line, u16string text);
-	char         GetEnteredCode();
-	bool         SetInputChannel(int channelNum);
-	bool		 Tare();
-	bool		 Calibrate();
-	int			 GetSerialNum();
-	u16string    Version();
+	unsigned char GetStatus();
+	bool          SetZero();
+	int           GetWeight();
+	void          SwitchToWeighing();
+	u16string     GetIndicatorText(int line);
+	bool          SetIndicatorText(int line, u16string text);
+	char          GetEnteredCode();
+	bool          SetInputChannel(int channelNum);
+	bool		  Tare();
+	bool		  Calibrate();
+	int			  GetSerialNum();
+	u16string     Version();
 };

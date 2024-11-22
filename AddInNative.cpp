@@ -775,14 +775,22 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		switch (lMethodNum)
 		{
 		case eMethVersion:
+		{
+			TV_VT  (pvarRetValue) = VTYPE_UI1;
+			TV_BOOL(pvarRetValue) = tenzom.GetStatus();
+			return true;
+		}
+		case eMethGetStatus:
+		{
 			SetPropString(pvarRetValue, sVersion);
 			return true;
+		}
 		case eMethConnect:
 		{
 			u16string name      = GetParamString(&paParams[0]);
 			long      bound     = paParams[1].intVal;
 			int       deviceAdr = paParams[2].ui8Val;
-			TV_VT(pvarRetValue) = VTYPE_BOOL;
+			TV_VT  (pvarRetValue) = VTYPE_BOOL;
 			TV_BOOL(pvarRetValue) = tenzom.OpenPort(name, bound, deviceAdr);
 			return true;
 		}
