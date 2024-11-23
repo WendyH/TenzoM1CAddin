@@ -718,8 +718,10 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 		case eMethConnect:
 		case eMethGetStatus:
 		case eMethGetWeight:
+		case eMethSwitchToWeighing:
 		case eMethGetGetEnteredCode:
 		case eMethGetIndicatorText:
+		case eMethSetIndicatorText:
 		case eMethGetSerialNum:
 		case eMethGetDeviceInfo:
 		case eMethGetPorts:
@@ -808,6 +810,12 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 			TV_BOOL(pvarRetValue) = tenzom.OpenPort(name, bound, deviceAdr);
 			return true;
 		}
+		case eMethSwitchToWeighing:
+		{
+			TV_VT  (pvarRetValue) = VTYPE_BOOL;
+			TV_BOOL(pvarRetValue) = tenzom.SwitchToWeighing();
+			return true;
+		}
 		case eMethGetWeight:
 		{
 			auto weight = tenzom.GetWeight();
@@ -837,6 +845,14 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		{
 			unsigned char num = paParams[0].ui8Val;
 			SetPropString(pvarRetValue, tenzom.GetIndicatorText(num));
+			return true;
+		}
+		case eMethSetIndicatorText:
+		{
+			const u16string text = GetParamString(&paParams[0]);
+			unsigned char   num  = paParams[1].ui8Val;
+			TV_VT  (pvarRetValue) = VTYPE_BOOL;
+			TV_BOOL(pvarRetValue) = tenzom.SetIndicatorText(text, num);
 			return true;
 		}
 		case eMethGetSerialNum:
