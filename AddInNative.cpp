@@ -722,6 +722,7 @@ bool CAddInNative::HasRetVal(const long lMethodNum)
 		case eMethGetGetEnteredCode:
 		case eMethGetIndicatorText:
 		case eMethSetIndicatorText:
+		case eMethSetInputChannel:
 		case eMethGetSerialNum:
 		case eMethGetDeviceInfo:
 		case eMethGetPorts:
@@ -853,6 +854,13 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 			unsigned char   num  = paParams[1].ui8Val;
 			TV_VT  (pvarRetValue) = VTYPE_BOOL;
 			TV_BOOL(pvarRetValue) = tenzom.SetIndicatorText(text, num);
+			return true;
+		}
+		case eMethSetInputChannel:
+		{
+			const int channelNum = paParams[0].ui8Val;
+			TV_VT  (pvarRetValue) = VTYPE_BOOL;
+			TV_BOOL(pvarRetValue) = tenzom.SetInputChannel(channelNum);
 			return true;
 		}
 		case eMethGetSerialNum:
