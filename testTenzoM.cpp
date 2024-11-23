@@ -58,10 +58,11 @@ int main(int argc, char** argv)
 		auto status = tenzom.GetStatus();
 
 		//tenzom.SwitchToWeighing();
-		auto s1 = tenzom.GetIndicatorText(0);
+		auto s1 = tenzom.GetIndicatorText(0x21);
 		printf("Text: %ls\n", s1.c_str());
 
-		//tenzom.SetIndicatorText(0, u"Привет! Это проверка русского текста!             ");
+		tenzom.SetIndicatorText(u"Привет! Это проверка русского текста!             ", 0x21);
+		auto s2 = tenzom.GetIndicatorText(0x21);
 
 		for (int i = 0; i < 1; i++)
 		{

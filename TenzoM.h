@@ -126,8 +126,8 @@ public:
 	bool          SetZero();
 	int           GetWeight();
 	bool          SwitchToWeighing();
-	u16string     GetIndicatorText(char num);
-	bool          SetIndicatorText(u16string text, char num);
+	u16string     GetIndicatorText(unsigned char num);
+	bool          SetIndicatorText(u16string text, unsigned char num);
 	char          GetEnteredCode();
 	bool          SetInputChannel(int channelNum);
 	bool		  Calibrate();

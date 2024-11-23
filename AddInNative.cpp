@@ -684,19 +684,19 @@ bool CAddInNative::GetParamDefValue(const long lMethodNum, const long lParamNum,
 		}
 		case eMethGetIndicatorText:
 		{
-			if (lParamNum == 1)
+			if (lParamNum == 0)
 			{
 				TV_VT(pvarParamDefValue) = VTYPE_I4;
-				TV_I4(pvarParamDefValue) = 0;
+				TV_I4(pvarParamDefValue) = 0x21;
 			}
 			return true;
 		}
 		case eMethSetIndicatorText:
 		{
-			if (lParamNum == 2)
+			if (lParamNum == 1)
 			{
 				TV_VT(pvarParamDefValue) = VTYPE_I4;
-				TV_I4(pvarParamDefValue) = 0;
+				TV_I4(pvarParamDefValue) = 0x22;
 			}
 			return true;
 		}
@@ -758,8 +758,8 @@ bool CAddInNative::CallAsProc(const long lMethodNum, tVariant* paParams, const l
 		case eMethSetIndicatorText:
 		{
 			const u16string text = GetParamString(&paParams[0]);
-			const int       line = paParams[1].ui8Val;
-			tenzom.SetIndicatorText(text, line);
+			unsigned char   num  = paParams[1].ui8Val;
+			tenzom.SetIndicatorText(text, num);
 			return true;
 		}
 		case eMethSwitchToWeighing:
@@ -835,8 +835,8 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		}
 		case eMethGetIndicatorText:
 		{
-			int line = paParams[0].ui8Val;
-			SetPropString(pvarRetValue, tenzom.GetIndicatorText(line));
+			unsigned char num = paParams[0].ui8Val;
+			SetPropString(pvarRetValue, tenzom.GetIndicatorText(num));
 			return true;
 		}
 		case eMethGetSerialNum:
