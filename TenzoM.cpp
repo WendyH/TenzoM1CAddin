@@ -1294,34 +1294,38 @@ bool TenzoM::SwitchToWeighing()
 /// <summary>
 /// Получить значение индикаторов (высвечивающегося текста)
 /// </summary>
-/// <param name="num">NUM - Номер устройства (описывается дополнительно для каждого устройства.
-/// 0x01 - основной семисегментный индикатор (ТВ-003, ТВ-009);
-/// 0x02 - дополнительный семисегментный индикатор (ТВ-003, ТВ-009);
+/// <param name="num">NUM - Номер устройства (описывается дополнительно для каждого устройства).
+/// 0x00 - не передавать код номера устройства
+/// 0x01 - основной индикатор (ТВ-003, ТВ-005, ТВ-009)
+/// 0x02 - дополнительный индикатор (ТВ-003, ТВ-009)
 /// 0x0F – индикатор ТВ-015
 /// 0x1F - верхняя строка индикатора (ТВ-014, ТВ-015, ТВ-019);
 /// 0x20 - нижняя строка индикатора (ТВ-015, ТВ-019);
 /// 0x21 - нижняя и верхняя строка индикатора (ТВ-015, ТВ-019);
 /// </param>
 /// <returns>Возвращается текст индикаторов</returns>
-u16string TenzoM::GetIndicatorText(char num = 0)
+u16string TenzoM::GetIndicatorText(unsigned char num)
 {
     long dwBytesRead = 0;
     u16string text = u"";
+    bool success = false;
 
     if (Protocol == eProtocolTenzoM)
     {
         char command  = '\xC6';
-        //char lineCode = '\x21';
-        //switch (line)
-        //{
-        //case 1: lineCode = '\x1F'; break;
-        //case 2: lineCode = '\x20'; break;
-        //default: break;
-        //}
 
-        char msg[] = { '\xFF', Adr, command, num, '\x00', '\xFF', '\xFF' };
-        SetCrcOfMessage(msg, sizeof(msg)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
-        bool success = Send(msg, sizeof(msg));
+        if (num == 0xFF) num = 0;
+
+        if (num == 0)
+        {
+            success = SendCommand(command);
+        }
+        else
+        {
+            char msg[] = { '\xFF', Adr, command, num, '\x00', '\xFF', '\xFF' };
+            SetCrcOfMessage(msg, sizeof(msg)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+            success = Send(msg, sizeof(msg));
+        }
         if (success)
         {
             dwBytesRead = Receive();
@@ -1360,9 +1364,10 @@ u16string TenzoM::GetIndicatorText(char num = 0)
 /// Вывести символьное сообщение на устройство отображения или вывода
 /// </summary>
 /// <param name="text">Текст, выводимый на индикаторы</param>
-/// <param name="num"></param>
+/// <param name="num">Номер устройства.
+/// Для ТВ-019: 0x22 - верхняя и нижняя, 0x21 - верхняя, 0x20 - нижняя</param>
 /// <returns>Возвращает true, если передача прошла успешно</returns>
-bool TenzoM::SetIndicatorText(u16string text, char num = 0)
+bool TenzoM::SetIndicatorText(u16string text, unsigned char num)
 {
     bool success = false;
     long dwBytesRead = 0;
@@ -1370,14 +1375,6 @@ bool TenzoM::SetIndicatorText(u16string text, char num = 0)
     if (Protocol == eProtocolTenzoM)
     {
         char command  = '\xD2';
-        //char lineCode = '\x22';
-        //switch (line)
-        //{
-        //case 1: lineCode = '\x21'; break;
-        //case 2: lineCode = '\x20'; break;
-        //default:
-        //    break;
-        //}
 
         auto t = UTF16_to_CP1251(text);
         auto s = t.c_str();
@@ -1391,11 +1388,16 @@ bool TenzoM::SetIndicatorText(u16string text, char num = 0)
         int len = strlen(s);
         if (len > 50) len = 50;
 
-        readBuffer[0] = '\xFF';
-        readBuffer[1] = Adr;
-        readBuffer[2] = command;
-        readBuffer[3] = num;
-        readBuffer[4] = len;
+        int n = 0;
+        readBuffer[n++] = '\xFF';
+        readBuffer[n++] = Adr;
+        readBuffer[n++] = command;
+
+        if (num != 0x00)
+        {
+            readBuffer[n++] = num;
+            readBuffer[n++] = len;
+        }
 
         int pos = 0; unsigned char chzam;
         for (int i = 0; i < len; i++)
@@ -1430,18 +1432,18 @@ bool TenzoM::SetIndicatorText(u16string text, char num = 0)
                     ch = chzam;
                 }
             }
-            readBuffer[5 + i] = ch;
+            readBuffer[n++] = ch;
         }
-        readBuffer[len + 5] = '\x00';
-        readBuffer[len + 6] = '\xFF';
-        readBuffer[len + 7] = '\xFF';
+        readBuffer[n++] = '\x00';
+        readBuffer[n++] = '\xFF';
+        readBuffer[n++] = '\xFF';
 
         //for (int i = 0; i < 40; i++)
         //{
         //    readBuffer[5 + i] = 0xD0 + i;
         //}
 
-        int messageLen = len + 8;
+        int messageLen = n;
 
         SetCrcOfMessage(readBuffer, messageLen); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
         if (Send(readBuffer, messageLen))
