@@ -17,7 +17,7 @@
 using namespace std;
 
 #define READ_TIMEOUT       2000     // milliseconds
-#define RECV_BUFFER_LENGHT 1024 * 4 // bytes
+#define RECV_BUFFER_LENGTH 1024 * 4 // bytes
 #define TCP_TIMEOUT_SEC    2
 
 class TenzoM
@@ -48,7 +48,7 @@ private:
 	int  tcpTimeout   = TCP_TIMEOUT_SEC;
 	int  clientSocket = INVALID_SOCKET;
 #endif
-	char readBuffer[RECV_BUFFER_LENGHT] = { 0 };
+	char readBuffer[RECV_BUFFER_LENGTH] = { 0 };
 	bool TryConnectTo();
 	bool Send(char* message, long msgSize);
 	bool SendCommand(char command);
@@ -64,7 +64,7 @@ private:
 	void Log(u16string txt, char* buf, int i);
 	void Log(u16string txt);
 	void SendKey(unsigned short keycode);
-	void SetUnsupportedComadrError();
+	void SetUnsupportedComandError();
 
 public:
 	enum ProtocolType
@@ -91,7 +91,7 @@ public:
 	ProtocolType Protocol = eProtocolTenzoM; // Протокол обмена с весами
 	char Adr   = 1;     // Адрес устройства
 	bool NScal = false; // Флаг использования второго тезнодатчика
-	bool Event = false; // Флаг присутствия события (введён код с клиавиатуры)
+	bool Event = false; // Флаг присутствия события (введён код с клавиатуры)
 
 	bool Calm     = false; // Вес стабилен
 	bool Overload = false; // Флаг перегрузки
@@ -100,7 +100,7 @@ public:
 
 	char DecimalPoint = '.';
 
-	bool SendKeys   = false; // Cобытие нажатия на нумпаде терминала посылает в систему нажатие клавиши
+	bool SendKeys   = false; // Событие нажатия на нумпаде терминала посылает в систему нажатие клавиши
 	bool NumpadKeys = false; // При посылке нажатия кнопок - использовать цифры нумпада клавиатуры
 
 	int  EmulMinKg = 9;    // Минимальный вес в килограммах при эмуляции веса
@@ -116,7 +116,7 @@ public:
 	u16string     Error     = { 0 };
 
 	void Delay(unsigned long ms);
-	bool OpenPort(u16string comName, long boud, int deviceAddress);
+	bool OpenPort(u16string comName, long bound, int deviceAddress);
 	bool PortOpened();
 	void ClosePort();
 

@@ -93,10 +93,10 @@ bool TenzoM::TryConnectTo()
 /// Открыть COM порт для общения с устройствами тензотермическими датчиками
 /// </summary>
 /// <param name="comName">Имя COM-порта в виде "COM1" для Windows или "tty1" для Linux</param>
-/// <param name="boud">Скорость обмена (бод)</param>
-/// <param name="deviceAddress">Адрес устройсва, как он прописан в самих весах</param>
+/// <param name="baud">Скорость обмена (бод)</param>
+/// <param name="deviceAddress">Адрес устройства, как он прописан в самих весах</param>
 /// <returns>Возвращает true, если порт успешно открыт</returns>
-bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
+bool TenzoM::OpenPort(u16string comName, long baud, int deviceAddress)
 {
     LastError = 0;
     Error.clear();
@@ -137,7 +137,7 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
         DCB dcb = { 0 };
         dcb.DCBlength = sizeof(dcb);
         GetCommState(comPort, &dcb);
-        dcb.BaudRate      = boud;
+        dcb.BaudRate      = baud;
         dcb.fBinary       = TRUE;
         dcb.fAbortOnError = TRUE;
         dcb.ByteSize      = 8;
@@ -145,6 +145,10 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
         dcb.StopBits      = ONESTOPBIT;
         SetCommState(comPort, &dcb);
 
+        /* The above code is using the PurgeComm function in C++ to clear the input and output buffers
+        of a specified communication port (comPort). The function is called with the parameters
+        PURGE_RXABORT, PURGE_RXCLEAR, PURGE_TXABORT, and PURGE_TXCLEAR, which specify the actions to
+        be taken on the input and output buffers. */
         PurgeComm(comPort, PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
 
         COMMTIMEOUTS commTimeouts;
@@ -178,8 +182,8 @@ bool TenzoM::OpenPort(u16string comName, long boud, int deviceAddress)
             return false;
 	    }
 
-        cfsetospeed(&settings, boud);
-        cfsetispeed(&settings, boud);
+        cfsetospeed(&settings, baud);
+        cfsetispeed(&settings, baud);
 	    tcsetattr(fd, TCSANOW, &settings);
 	    int flags = fcntl(fd, F_GETFL, 0);
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -217,7 +221,7 @@ void TenzoM::Delay(unsigned long ms)
 }
 
 /// <summary>
-/// Провека подключения к порту (весам)
+/// Проверка подключения к порту (весам)
 /// </summary>
 /// <returns>Возвращает true - если к COM-порту в данный момент установлено соединение.</returns>
 bool TenzoM::PortOpened()
@@ -242,7 +246,7 @@ bool TenzoM::PortOpened()
 
 /// <summary>
 /// Получение от устройства ответа.
-/// Полученные данные хранятся в буффере readBuffer.
+/// Полученные данные хранятся в буфере readBuffer.
 /// </summary>
 /// <returns>Возвращается количество считанных байт</returns>
 unsigned long TenzoM::Receive()
@@ -253,7 +257,7 @@ unsigned long TenzoM::Receive()
 
     try
     {
-        memset(readBuffer, 0, RECV_BUFFER_LENGHT);
+        memset(readBuffer, 0, RECV_BUFFER_LENGTH);
 
         if (!PortOpened()) return 0;
         Delay(50);
@@ -270,7 +274,7 @@ unsigned long TenzoM::Receive()
             osReader.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
             if (osReader.hEvent)
             {
-                if (!ReadFile(comPort, readBuffer, RECV_BUFFER_LENGHT, &dwReadBytes, &osReader)) {
+                if (!ReadFile(comPort, readBuffer, RECV_BUFFER_LENGTH, &dwReadBytes, &osReader)) {
                     if (GetLastError() == ERROR_IO_PENDING)
                     {
                         dwResult = WaitForSingleObject(osReader.hEvent, READ_TIMEOUT);
@@ -316,7 +320,7 @@ unsigned long TenzoM::Receive()
                 }
             }
     #else // POSIX
-            dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGHT);
+            dwReadBytes = read(fd, &readBuffer, RECV_BUFFER_LENGTH);
             bSuccess = dwReadBytes > 0;
     #endif
 
@@ -448,7 +452,7 @@ bool TenzoM::SendCommand(char command)
     case TenzoM::eProtocolTenzoM:
     {
         char msg1[] = { '\xFF', Adr, command, '\x00', '\xFF', '\xFF' };
-        SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        SetCrcOfMessage(msg1, sizeof(msg1)); // "Подписываем" - устанавливаем третий байт с конца (перед FF FF) как CRC сообщения
         success = Send(msg1, sizeof(msg1));
         break;
     }
@@ -474,7 +478,7 @@ bool TenzoM::SendCommand(char command)
 /// <param name="bufSize">Длина сообщения</param>
 void TenzoM::SetCrcOfMessage(char* buffer, long bufSize)
 {
-    if (bufSize < 6) return; // minimum message lenght
+    if (bufSize < 6) return; // minimum message length
     buffer[bufSize - 3] = 0; // set crc to 0
     char byte, crc = 0; constexpr char polinom = '\x69';
     for (int i = 1; i < bufSize - 2; i++)
@@ -502,7 +506,7 @@ void TenzoM::SetCrcOfMessage(char* buffer, long bufSize)
 }
 
 /// <summary>
-/// Поиск в считнанных данных readBuffer начала и конца пакета по продоколу TenzoM
+/// Поиск в считанных данных readBuffer начала и конца пакета по протоколу TenzoM
 /// </summary>
 /// <param name="bytesRead">Количество считанных байт</param>
 /// <param name="command">Код операции, ответ на который мы посылали ищем</param>
@@ -515,7 +519,7 @@ bool TenzoM::FindTenzoMPacket(long bytesRead, char command)
 }
 
 /// <summary>
-/// Поиск в считнанных данных readBuffer начала и конца пакета по продоколу TenzoM
+/// Поиск в считанных данных readBuffer начала и конца пакета по протоколу TenzoM
 /// </summary>
 /// <param name="bytesRead">Количество считанных байт</param>
 /// <param name="command">Код операции, ответ на который мы посылали ищем</param>
@@ -638,7 +642,7 @@ int TenzoM::ExtractWeight(char* data, long dataSize)
 
     weight = weight * 1000; // Возвращаем вес всегда граммах
 
-    // За весом в полученном буфере идёт байт CON с дополнительными фалагами
+    // За весом в полученном буфере идёт байт CON с дополнительными флагами
     const char con = data[bytes];
 
     int commaPosition = con & '\x07'; // Первые три бита - позиция запятой 
@@ -646,7 +650,7 @@ int TenzoM::ExtractWeight(char* data, long dataSize)
     weight /= delimiter; // Делим вес на посчитанный делитель (при сдвиге запятой)
 
     if (con & '\x80') weight *= -1; // Определяем, стоит ли флаг минус
-    Event    = (con & '\x40'); // Флаг присутствия события (введён код с клиавиатуры)
+    Event    = (con & '\x40'); // Флаг присутствия события (введён код с клавиатуры)
     NScal    = (con & '\x20'); // Флаг использования второго тезнодатчика (в описании протокола написано "текущий номер используемых весов")
     Calm     = (con & '\x10'); // Флаг успокоения веса (вес стабилен)
     Overload = (con & '\x08'); // Флаг перегруза
@@ -983,11 +987,14 @@ void TenzoM::SendKey(unsigned short keycode)
 {
 #if defined(_WIN64) || defined(_WIN32)
     INPUT inputs[2] = { 0 };
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = keycode;
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = keycode;
+    
+    inputs[0].type       = INPUT_KEYBOARD;
+    inputs[0].ki.wVk     = keycode;
+
+    inputs[1].type       = INPUT_KEYBOARD;
+    inputs[1].ki.wVk     = keycode;
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
     SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
 
 #elif defined(__linux)
@@ -997,7 +1004,7 @@ void TenzoM::SendKey(unsigned short keycode)
 #endif
 }
 
-void TenzoM::SetUnsupportedComadrError()
+void TenzoM::SetUnsupportedComandError()
 {
     Error = u"Команда не поддерживается устройством";
     LastError = 0x01;
@@ -1095,7 +1102,7 @@ unsigned char TenzoM::GetStatus()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1133,7 +1140,7 @@ bool TenzoM::SetZero()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
 
@@ -1232,7 +1239,7 @@ int TenzoM::GetWeight()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1278,7 +1285,7 @@ bool TenzoM::SwitchToWeighing()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1323,7 +1330,7 @@ u16string TenzoM::GetIndicatorText(unsigned char num)
         else
         {
             char msg[] = { '\xFF', Adr, command, num, '\x00', '\xFF', '\xFF' };
-            SetCrcOfMessage(msg, sizeof(msg)); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+            SetCrcOfMessage(msg, sizeof(msg)); // "Подписываем" - устанавливаем третий байт с конца (перед FF FF) как CRC сообщения
             success = Send(msg, sizeof(msg));
         }
         if (success)
@@ -1340,7 +1347,7 @@ u16string TenzoM::GetIndicatorText(unsigned char num)
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1445,7 +1452,7 @@ bool TenzoM::SetIndicatorText(u16string text, unsigned char num)
 
         int messageLen = n;
 
-        SetCrcOfMessage(readBuffer, messageLen); // "Подписываем" - устанавливаем трейтий байт с конца (перед FF FF) как CRC сообщения
+        SetCrcOfMessage(readBuffer, messageLen); // "Подписываем" - устанавливаем третий байт с конца (перед FF FF) как CRC сообщения
         if (Send(readBuffer, messageLen))
         {
             dwBytesRead = Receive();
@@ -1457,7 +1464,7 @@ bool TenzoM::SetIndicatorText(u16string text, unsigned char num)
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1513,7 +1520,7 @@ char TenzoM::GetEnteredCode()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
                 Event = false;
             }
@@ -1562,7 +1569,7 @@ bool TenzoM::SetInputChannel(int channelNum)
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1596,7 +1603,7 @@ bool TenzoM::Calibrate()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
             if (!success)
@@ -1634,7 +1641,7 @@ int TenzoM::GetSerialNum()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }
@@ -1666,7 +1673,7 @@ u16string TenzoM::Version()
                 }
                 else
                 {
-                    SetUnsupportedComadrError();
+                    SetUnsupportedComandError();
                 }
             }
         }

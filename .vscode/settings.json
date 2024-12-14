@@ -6,6 +6,46 @@
     ],
     "C_Cpp.default.compilerPath": "",
     "files.associations": {
-        "chrono": "cpp"
-    }
+        "chrono": "cpp",
+        "exception": "cpp"
+    },
+    "cSpell.words": [
+        "Catched",
+        "chzam",
+        "COMMTIMEOUTS",
+        "dats",
+        "dllmain",
+        "DUNICODE",
+        "DWIN",
+        "eptr",
+        "issame",
+        "KEYEVENTF",
+        "lboost",
+        "LPCSTR",
+        "NOPARITY",
+        "polinom",
+        "RXABORT",
+        "RXCLEAR",
+        "SETDTR",
+        "stdafx",
+        "Tenzo",
+        "tenzom",
+        "TXABORT",
+        "wchlen",
+        "wcode",
+        "wcom",
+        "wregex",
+        "WSADATA",
+        "wsetlocale",
+        "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ",
+        "БГЁЖЗИЙЛПУФЧШЪЫЭЮ",
+        "Нумпад",
+        "нумпада",
+        "нумпаде",
+        "рандомного",
+        "тезнодатчика",
+        "тензотермическими",
+        "Щдфцщ",
+        "Ябвгёжзийклмнптчшъыьэюя"
+    ]
 }

@@ -1,5 +1,5 @@
 # Cmake script for project AddInNative
-# autor: 1C
+# author: 1C
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5 FATAL_ERROR)
 
