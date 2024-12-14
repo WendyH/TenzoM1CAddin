@@ -36,10 +36,10 @@ if (UNIX)
 #                              PROPERTIES COMPILE_FLAGS
 #                              "-fPIC ")
 set (CMAKE_CXX_FLAGS " -std=c++11 -O1 -fPIC ")
-							  
+
 target_link_libraries(${PROJECT_NAME} -L${CMAKE_SOURCE_DIR}/lib/linux/x${CPU}/)
 target_link_libraries(${PROJECT_NAME} -lboost_regex)
-							  
+
 else()
     target_link_libraries(${PROJECT_NAME} -L${CMAKE_SOURCE_DIR}/lib/win/x${CPU}/)
 	
@@ -55,9 +55,9 @@ else()
 endif()
 
 set_target_properties( ${PROJECT_NAME} PROPERTIES
-   CLEAN_DIRECT_OUTPUT 1
-   # avoid conflicts between library and binary target names
-   OUTPUT_NAME ${PROJECT_NAME}${MySuffix1}${MySuffix2} 
-   #WINDOWS_EXPORT_ALL_SYMBOLS TRUE
-   )
+    CLEAN_DIRECT_OUTPUT 1
+    # avoid conflicts between library and binary target names
+    OUTPUT_NAME ${PROJECT_NAME}${MySuffix1}${MySuffix2} 
+    #WINDOWS_EXPORT_ALL_SYMBOLS TRUE
+    )
 
