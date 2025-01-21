@@ -635,8 +635,9 @@ int TenzoM::ExtractWeight(char* data, long dataSize)
     // Распаковка цифр веса из BCD формата (младшие байты первые)
     for (int i = 0; i < bytes; i++)
     {
-        auto byte = data[i];
-        weight += ((byte >> 4) * 10 + (byte & '\x0F')) * multiplier;
+        unsigned char byte = data[i];
+        int val = ((unsigned char)byte >> 4) * 10 + ((unsigned char)byte & '\x0F');
+        weight += val * multiplier;
         multiplier *= 100;
     }
 

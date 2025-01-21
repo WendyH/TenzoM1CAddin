@@ -22,7 +22,7 @@
 using namespace std;
 
 static const u16string sClassName(u"TenzoM");
-static const u16string sVersion(u"02.00");
+static const u16string sVersion(u"02.02");
 
 static const array<u16string, CAddInNative::ePropLast> osProps =
 {
@@ -793,13 +793,13 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant* pvarRetValue, tVa
 		{
 		case eMethVersion:
 		{
-			TV_VT  (pvarRetValue) = VTYPE_UI1;
-			TV_BOOL(pvarRetValue) = tenzom.GetStatus();
+			SetPropString(pvarRetValue, sVersion);
 			return true;
 		}
 		case eMethGetStatus:
 		{
-			SetPropString(pvarRetValue, sVersion);
+			TV_VT(pvarRetValue) = VTYPE_UI1;
+			TV_BOOL(pvarRetValue) = tenzom.GetStatus();
 			return true;
 		}
 		case eMethConnect:
